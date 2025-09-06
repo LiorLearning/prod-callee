@@ -25,6 +25,7 @@ export interface UnifiedStreamingState {
  * This is the new system that lets AI decide when to generate images
  */
 export function useUnifiedAIStreaming(options: UseUnifiedAIStreamingOptions) {
+  console.log('🚨 HOOK VERIFICATION: useUnifiedAIStreaming hook is running the NEW CODE VERSION with 5-second delay');
   const { userId, onNewImage, onResponseComplete } = options;
   
   // State management
@@ -40,6 +41,13 @@ export function useUnifiedAIStreaming(options: UseUnifiedAIStreamingOptions) {
   // Generate stable session ID that persists across re-renders
   const sessionId = useMemo(() => crypto.randomUUID(), []); // Empty dependency array ensures it never changes
   
+  // Store onNewImage callback in ref to avoid recreating event handler
+  const onNewImageRef = useRef(onNewImage);
+  onNewImageRef.current = onNewImage;
+
+  // Track if an error occurred to prevent complete event from setting loading state
+  const hasErrorOccurredRef = useRef(false);
+
   // Handle stream events - STABLE callback to prevent useEffect cleanup
   const handleStreamEventRef = useRef((event: StreamEvent) => {
     console.log('📡 Stream event received:', event.type, event.content.substring(0, 100));
@@ -53,85 +61,86 @@ export function useUnifiedAIStreaming(options: UseUnifiedAIStreamingOptions) {
           break;
           
         case 'image_start':
+          console.log('🎯 Image generation started');
           newState.isGeneratingImage = true;
           // Loading sound is handled in response processor
+          
+          // 🛠️ SAFETY: Set a timeout to force clear loading state if image_complete never arrives
+          setTimeout(() => {
+            setStreamingState(prev => {
+              if (prev.isGeneratingImage) {
+                console.warn('🚨 SAFETY: Clearing stuck loading state after timeout');
+                return { ...prev, isGeneratingImage: false };
+              }
+              return prev;
+            });
+          }, 30000);
           break;
           
         case 'image_complete':
-          newState.isGeneratingImage = false;
+          console.log('✅ 🚨 CRITICAL: Image generation completed - loading will continue until stream completes');
+          console.log('🎯 🚨 CRITICAL: IMAGE_COMPLETE EVENT - keeping isGeneratingImage as TRUE');
+          // 🎯 KEEP isGeneratingImage as TRUE - delay logic handled in 'complete' event
+          newState.isGeneratingImage = true;
+          
           if (event.metadata?.imageUrl) {
             newState.generatedImages.push(event.metadata.imageUrl);
-            // Call callback for new image
-            if (onNewImage && event.metadata.prompt) {
-              onNewImage(event.metadata.imageUrl, event.metadata.prompt);
+            // Call callback for new image using the ref to get latest callback
+            if (onNewImageRef.current && event.metadata.prompt) {
+              onNewImageRef.current(event.metadata.imageUrl, event.metadata.prompt);
             }
             // Sound handling is done in response processor
           }
           break;
           
         case 'error':
+          console.log('❌ Stream error - stopping loading screen');
           newState.error = event.content;
           newState.isGeneratingImage = false;
+          // Mark that an error occurred to prevent complete event from setting loading state
+          hasErrorOccurredRef.current = true;
           // Ensure loading sound is stopped on error
           stopImageLoadingSound();
           break;
           
         case 'complete':
+          console.log('✅ Stream completed - will stop loading states in 5 seconds');
           newState.isStreaming = false;
-          newState.isGeneratingImage = false;
-          // Ensure loading sound is stopped when stream completes
-          stopImageLoadingSound();
+          
+          // 🛠️ CRITICAL FIX: Don't set loading state or schedule timeout if an error occurred
+          if (hasErrorOccurredRef.current) {
+            console.log('🚫 COMPLETE EVENT: Skipping loading state and timeout due to previous error');
+            newState.isGeneratingImage = false;
+            // Reset error flag for next request
+            hasErrorOccurredRef.current = false;
+          } else {
+            console.log('🎯 COMPLETE EVENT: Setting isGeneratingImage to TRUE for delay period');
+            // 🎯 KEEP isGeneratingImage as TRUE during the delay period
+            newState.isGeneratingImage = true;
+            
+            // 🎯 HARDCODED 5-second delay before stopping loading screen and sounds
+            const timeoutId = setTimeout(() => {
+              console.log('🔊 🚨 CRITICAL: 5-second delay timeout FIRED - stopping loading screen and sounds now (from complete event)');
+              setStreamingState(prev => {
+                console.log('🎯 🚨 CRITICAL: TIMEOUT EXECUTING - Setting isGeneratingImage to false after delay', prev.isGeneratingImage);
+                return {
+                  ...prev,
+                  isGeneratingImage: false
+                };
+              });
+              // Ensure loading sound is stopped after the delay
+              stopImageLoadingSound();
+              console.log('🔊 🚨 CRITICAL: Timeout execution completed');
+            }, 4000);
+            
+            console.log('🎯 🚨 CRITICAL: Timeout scheduled with ID:', timeoutId);
+          }
           break;
       }
       
       return newState;
     });
   });
-  
-  // Update the ref when onNewImage changes
-  useEffect(() => {
-    handleStreamEventRef.current = (event: StreamEvent) => {
-      console.log('📡 Stream event received:', event.type, event.content.substring(0, 100));
-      
-      setStreamingState(prev => {
-        const newState = { ...prev };
-        
-        switch (event.type) {
-          case 'text':
-            newState.currentText += event.content;
-            break;
-            
-          case 'image_start':
-            newState.isGeneratingImage = true;
-            break;
-            
-          case 'image_complete':
-            newState.isGeneratingImage = false;
-            if (event.metadata?.imageUrl) {
-              newState.generatedImages.push(event.metadata.imageUrl);
-              if (onNewImage && event.metadata.prompt) {
-                onNewImage(event.metadata.imageUrl, event.metadata.prompt);
-              }
-            }
-            break;
-            
-          case 'error':
-            newState.error = event.content;
-            newState.isGeneratingImage = false;
-            stopImageLoadingSound();
-            break;
-            
-          case 'complete':
-            newState.isStreaming = false;
-            newState.isGeneratingImage = false;
-            stopImageLoadingSound();
-            break;
-        }
-        
-        return newState;
-      });
-    };
-  }, [onNewImage]);
   
   // Register/unregister stream event listener - STABLE to prevent cleanup during re-renders
   useEffect(() => {
@@ -166,13 +175,17 @@ export function useUnifiedAIStreaming(options: UseUnifiedAIStreamingOptions) {
       try {
         aiService.abortUnifiedStream(sessionId);
         
-        // Immediately reset streaming state to prevent stuck conditions
-        setStreamingState(prev => ({
-          ...prev,
-          isStreaming: false,
-          isGeneratingImage: false,
-          error: null
-        }));
+        // Immediately reset streaming state to prevent stuck conditions - but preserve loading delay
+        setStreamingState(prev => {
+          console.log('🎯 ABORT CLEANUP: Current isGeneratingImage state:', prev.isGeneratingImage);
+          return {
+            ...prev,
+            isStreaming: false,
+            // 🎯 DON'T reset isGeneratingImage here if it's in delay period
+            // isGeneratingImage: false,
+            error: null
+          };
+        });
         
         // Small delay to let the abort complete
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -188,16 +201,23 @@ export function useUnifiedAIStreaming(options: UseUnifiedAIStreamingOptions) {
       previouslyStreaming: streamingState.isStreaming
     });
     
-    // Reset state for new message
-    setStreamingState(prev => ({
-      ...prev,
-      isStreaming: true,
-      isGeneratingImage: false,
-      currentText: '',
-      generatedImages: [],
-      error: null,
-      lastResponse: null
-    }));
+    // Reset error flag for new request
+    hasErrorOccurredRef.current = false;
+    
+    // Reset state for new message - but DON'T reset isGeneratingImage if it's in delay period
+    setStreamingState(prev => {
+      console.log('🎯 NEW MESSAGE: Current isGeneratingImage state:', prev.isGeneratingImage);
+      return {
+        ...prev,
+        isStreaming: true,
+        // 🎯 DON'T reset isGeneratingImage here if user sends new message during delay
+        // isGeneratingImage: false,
+        currentText: '',
+        generatedImages: [],
+        error: null,
+        lastResponse: null
+      };
+    });
     
     // 🛠️ Set up a safety timeout to prevent permanently stuck state
     let streamingTimeout: NodeJS.Timeout | null = null;
@@ -207,12 +227,16 @@ export function useUnifiedAIStreaming(options: UseUnifiedAIStreamingOptions) {
       
       streamingTimeout = setTimeout(() => {
         console.log('🚨 STREAMING TIMEOUT: Force-resetting stuck state after 35 seconds');
-        setStreamingState(prev => ({
-          ...prev,
-          isStreaming: false,
-          isGeneratingImage: false,
-          error: 'Request timed out - please try again'
-        }));
+        setStreamingState(prev => {
+          console.log('🎯 STREAMING TIMEOUT: Current isGeneratingImage state:', prev.isGeneratingImage);
+          return {
+            ...prev,
+            isStreaming: false,
+            // 🎯 Reset isGeneratingImage - this is a true timeout, not normal completion
+            isGeneratingImage: false,
+            error: 'Request timed out - please try again'
+          };
+        });
         
         // Also abort the service-level stream
         try {
@@ -238,11 +262,11 @@ export function useUnifiedAIStreaming(options: UseUnifiedAIStreamingOptions) {
       
       console.log(`✅ Unified response received with ${response.imageUrls.length} images`);
       
-      // Update final state
+      // Update final state - but keep isGeneratingImage true for the 10-second delay
       setStreamingState(prev => ({
         ...prev,
         isStreaming: false,
-        isGeneratingImage: false, // Ensure this is also reset
+        // 🎯 DON'T reset isGeneratingImage here - let the event handler timeout handle it
         lastResponse: response,
         currentText: response.textContent,
         generatedImages: response.imageUrls,

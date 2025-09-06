@@ -1,4 +1,4 @@
-import { ChatMessage } from './utils';
+import { ChatMessage, sanitizeConversationContext } from './utils';
 import { playImageLoadingSound, stopImageLoadingSound, playImageCompleteSound } from './sounds';
 
 export interface StreamChunk {
@@ -88,11 +88,15 @@ export class ResponseProcessor {
     let context = "Context for image generation:\n";
     
     if (userMessages.length > 0) {
-      context += `Recent user requests: ${userMessages.join(' | ')}\n`;
+      // Sanitize user messages to avoid safety system rejections
+      const sanitizedUserMessages = userMessages.map(msg => sanitizeConversationContext(msg));
+      context += `Recent user requests: ${sanitizedUserMessages.join(' | ')}\n`;
     }
     
     if (totalMessages > 0) {
-      context += `Adventure summary: ${lastFewMessages}\n`;
+      // Sanitize the adventure summary to avoid safety system rejections
+      const sanitizedSummary = sanitizeConversationContext(lastFewMessages);
+      context += `Adventure summary: ${sanitizedSummary}\n`;
     }
     
     return context;
@@ -120,7 +124,8 @@ export class ResponseProcessor {
           .join(' ');
         
         // Use original user message for fallback generation if available
-        const rawFallbackPrompt = originalUserMessage || this.generateFallbackImagePrompt(response, previousContext);
+        // Sanitize the user message to avoid safety system rejections
+        const rawFallbackPrompt = originalUserMessage ? sanitizeConversationContext(originalUserMessage) : this.generateFallbackImagePrompt(response, previousContext);
         
         // Apply enhanced safety prompt to fallback as well
         const enhancedFallbackPrompt = `Remove parts that make it moderated. Reduce intensity of violence or eliminate sexual parts if any. Then proceed to create image. Create a very realistic, high-quality image: ${rawFallbackPrompt}. Style: Realistic with vivid details. It should NOT be cartoonish or kiddish. Keep all content completely family friendly with no nudity, no sexual content, and no sensual or romantic posing. Absolutely avoid sexualized bodies, ensure no sensual poses or clothing (no cleavage, lingerie, swimwear, exposed midriff, or tight/transparent outfits); characters are depicted in fully modest attire suitable for kids. No kissing, flirting, or adult themes. Strictly avoid text on the images.`;
@@ -232,7 +237,8 @@ export class ResponseProcessor {
       
       try {
         // Use original user message for image generation instead of AI-generated description
-        const rawPrompt = originalUserMessage || prompt;
+        // Sanitize the user message to avoid safety system rejections
+        const rawPrompt = originalUserMessage ? sanitizeConversationContext(originalUserMessage) : prompt;
         
         // Extract context from adventure history for better image generation
         const conversationContext = this.buildConversationContext(adventureContext);

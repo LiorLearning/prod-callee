@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { SpellingQuestion } from './questionBankUtils';
 import { UnifiedAIStreamingService, UnifiedAIResponse } from './unified-ai-streaming-service';
+import { sanitizeConversationContext } from './utils';
 
 interface ChatMessage {
   type: 'user' | 'ai';
@@ -198,6 +199,8 @@ SENTENCE PLACEMENT RULE: The word "${spellingWord}" MUST appear in your FIRST or
 ✅ CORRECT: "${spellingWord}" appears in sentence 1 OR sentence 2
 
 This is mandatory for the educational system to function properly. The word "${spellingWord}" must be exactly as written (no variations, synonyms, or plurals).
+
+Make sure the word is exactly as written don't even change it to hyphen words, for example if the word is 'baseball' it should not be converted to 'baseball-like', it should remain baseball
 
 REMEMBER: First two sentences = ✅ | Later sentences = ❌` : ''}
 
@@ -732,7 +735,7 @@ IMPORTANT: This is the very first message to start our adventure conversation. G
   // Generate weighted prompt: 80% user input + 10% latest AI response + 10% other context
   private generateWeightedPrompt(currentText: string, conversationHistory: ChatMessage[]): string {
     if (!conversationHistory || conversationHistory.length === 0) {
-      return currentText;
+      return sanitizeConversationContext(currentText);
     }
 
     // Extract latest AI response (10% weight)
@@ -751,14 +754,19 @@ IMPORTANT: This is the very first message to start our adventure conversation. G
       .substring(0, 100);
 
     // 80% current text + 10% latest AI + 10% other context
-    let weightedContent = currentText;
+    // Sanitize the current text to avoid safety system rejections
+    let weightedContent = sanitizeConversationContext(currentText);
     
     if (latestAiContext) {
-      weightedContent += `. Latest AI context: ${latestAiContext}`;
+      // Sanitize AI context as well
+      const sanitizedAiContext = sanitizeConversationContext(latestAiContext);
+      weightedContent += `. Latest AI context: ${sanitizedAiContext}`;
     }
     
     if (otherContextMessages) {
-      weightedContent += `. Other context: ${otherContextMessages}`;
+      // Sanitize other context messages
+      const sanitizedOtherContext = sanitizeConversationContext(otherContextMessages);
+      weightedContent += `. Other context: ${sanitizedOtherContext}`;
     }
     
     return weightedContent;
@@ -1225,7 +1233,7 @@ Return ONLY the new reading passage, nothing else.`;
   async generateAdventureImage(
     prompt: string,
     userAdventure: ChatMessage[],
-    fallbackPrompt: string = "space adventure scene"
+    fallbackPrompt: string = "adventure scene"
   ): Promise<{ imageUrl: string; usedPrompt: string } | null> {
     // If not initialized or no API key, return null (will show placeholder)
     if (!this.isInitialized || !this.client) {
@@ -1436,11 +1444,15 @@ Return ONLY the new reading passage, nothing else.`;
     let context = "Context for image generation:\n";
     
     if (userMessages.length > 0) {
-      context += `Recent user requests: ${userMessages.join(' | ')}\n`;
+      // Sanitize user messages to avoid safety system rejections
+      const sanitizedUserMessages = userMessages.map(msg => sanitizeConversationContext(msg));
+      context += `Recent user requests: ${sanitizedUserMessages.join(' | ')}\n`;
     }
     
     if (totalMessages > 0) {
-      context += `Adventure summary: ${lastFewMessages}\n`;
+      // Sanitize the adventure summary to avoid safety system rejections
+      const sanitizedSummary = sanitizeConversationContext(lastFewMessages);
+      context += `Adventure summary: ${sanitizedSummary}\n`;
     }
     
     return context;

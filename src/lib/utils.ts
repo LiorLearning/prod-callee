@@ -1050,3 +1050,154 @@ export const formatAIMessage = (content: string, spellingWord?: string): string 
   
   return formatted;
 };
+
+/**
+ * Sanitize conversation context for image generation by replacing problematic words
+ * with gentler alternatives to avoid OpenAI safety system rejections
+ */
+export function sanitizeConversationContext(text: string): string {
+  if (!text) return text;
+  
+  // Define word replacements - problematic words -> safe alternatives
+  const wordReplacements: Record<string, string> = {
+    // Combat/violence terms
+    'fighting': 'playing with',
+    'fight': 'play with',
+    'battle': 'adventure with',
+    'battling': 'adventuring with',
+    'combat': 'meeting',
+    'attacking': 'approaching',
+    'attack': 'approach',
+    'defeating': 'helping',
+    'defeat': 'help',
+    'destroying': 'exploring',
+    'destroy': 'explore',
+    'killing': 'finding',
+    'kill': 'find',
+    'shooting': 'pointing at',
+    'shoot': 'point at',
+    'hitting': 'touching',
+    'hit': 'touch',
+    'punching': 'high-fiving',
+    'punch': 'high-five',
+    'kicking': 'dancing with',
+    'kick': 'dance with',
+    'slashing': 'waving at',
+    'slash': 'wave at',
+    'stabbing': 'poking',
+    'stab': 'poke',
+    'smashing': 'building with',
+    'smash': 'build with',
+    'crushing': 'hugging',
+    'crush': 'hug',
+    'exploding': 'sparkling',
+    'explode': 'sparkle',
+    'explosion': 'fireworks',
+    'blasting': 'shining on',
+    'blast': 'shine on',
+    
+    // Weapon terms
+    'sword': 'magic wand',
+    'swords': 'magic wands',
+    'gun': 'toy blaster',
+    'guns': 'toy blasters',
+    'weapon': 'tool',
+    'weapons': 'tools',
+    'knife': 'spoon',
+    'knives': 'spoons',
+    'dagger': 'magic stick',
+    'daggers': 'magic sticks',
+    'bow': 'rainbow maker',
+    'arrow': 'shooting star',
+    'arrows': 'shooting stars',
+    'cannon': 'confetti launcher',
+    'cannons': 'confetti launchers',
+    'bomb': 'surprise ball',
+    'bombs': 'surprise balls',
+    'missile': 'rocket ship',
+    'missiles': 'rocket ships',
+    
+    // Intensity modifiers
+    'violent': 'exciting',
+    'aggressive': 'enthusiastic',
+    'fierce': 'energetic',
+    'brutal': 'amazing',
+    'savage': 'wild',
+    'vicious': 'playful',
+    'deadly': 'magical',
+    'dangerous': 'adventurous',
+    'threatening': 'impressive',
+    'menacing': 'mysterious',
+    
+    // War/conflict terms
+    'war': 'game',
+    'wars': 'games',
+    'warfare': 'competition',
+    'invasion': 'visit',
+    'invading': 'visiting',
+    'conquer': 'explore',
+    'conquering': 'exploring',
+    'siege': 'party',
+    'raid': 'adventure',
+    'raiding': 'adventuring',
+    
+    // Dark/scary terms
+    'evil': 'mischievous',
+    'wicked': 'playful',
+    'sinister': 'mysterious',
+    'dark': 'shadowy',
+    'nightmare': 'dream',
+    'terror': 'surprise',
+    'horror': 'mystery',
+    'scary': 'surprising',
+    'frightening': 'amazing',
+    'terrifying': 'incredible',
+    
+    // Death/injury terms
+    'dead': 'sleeping',
+    'death': 'nap time',
+    'dying': 'resting',
+    'die': 'rest',
+    'killed': 'helped to sleep',
+    'wounded': 'tired',
+    'injured': 'resting',
+    'blood': 'red paint',
+    'bleeding': 'painting',
+    'pain': 'tickles',
+    'hurt': 'tickle',
+    'suffering': 'giggling',
+    
+    // Monster/creature terms (make them friendlier)
+    'monster': 'friendly creature',
+    'monsters': 'friendly creatures',
+    'demon': 'magical being',
+    'demons': 'magical beings',
+    'devil': 'red friend',
+    'ghost': 'invisible friend',
+    'ghosts': 'invisible friends',
+    'zombie': 'sleepy friend',
+    'zombies': 'sleepy friends',
+    'vampire': 'night friend',
+    'vampires': 'night friends'
+  };
+  
+  let sanitizedText = text;
+  
+  // Apply word replacements (case-insensitive)
+  Object.entries(wordReplacements).forEach(([problematic, safe]) => {
+    // Create regex for whole word matching (case-insensitive)
+    const regex = new RegExp(`\\b${problematic}\\b`, 'gi');
+    sanitizedText = sanitizedText.replace(regex, safe);
+  });
+  
+  // Log the sanitization for debugging
+  if (sanitizedText !== text) {
+    console.log('🧹 Sanitized conversation context:', {
+      original: text.substring(0, 100) + (text.length > 100 ? '...' : ''),
+      sanitized: sanitizedText.substring(0, 100) + (sanitizedText.length > 100 ? '...' : ''),
+      changesDetected: true
+    });
+  }
+  
+  return sanitizedText;
+}
