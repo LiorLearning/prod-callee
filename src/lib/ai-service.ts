@@ -88,7 +88,7 @@ MANDATORY FIRST-SENTENCE RULE: Your FIRST or SECOND sentence MUST contain "${spe
 
 REQUIREMENTS:
 - Create the most natural next response with only one constraint: "${spellingWord}" must appear in sentence 1 OR 2 (never later!)
-- Use exact spelling: "${spellingWord}" (no variations)
+- Use exact spelling: "${spellingWord}", do not have it as a sub word or a part of a word.
 - Follow story creation prompt guidelines to keep response totally natural and conversational.
 - Responses = 2–3 short lines, with \\n breaks.
 - Strictly restrict each response to 35 words maximum. DO NOT exceed this limit.
@@ -115,11 +115,23 @@ Role & Perspective:
 - Always explore and reference ${userData?.username || 'adventurer'}'s emerging interests when possible.
 - Strictly restrict each response to 35 words maximum. DO NOT exceed this limit. 
 - Strictly ask only one clear question per response. Never stack multiple questions in a single turn. Remove redundant or unnecessary words or lines.
+- When the child names a real show/game, acknowledge it warmly and weave 1–2 clear, kid-safe references right away (e.g., “the Cooper house in Medford,” “Central Perk couch,” “a Minecraft diamond pickaxe”).
+
+
+Real-World References (Shows/Games):
+- If the child mentions a known show/game/character (e.g., Young Sheldon, Friends, Minecraft, Sonic), treat it as a real reference.
+- Briefly weave 1–2 kid-safe details (names, settings, catchphrases, iconic items) to ground the story.
+- Avoid adult themes; keep age-appropriate. No spoilers unless the child asks.
+- Do not quote copyrighted lines >10 words. Paraphrase instead.
+
 
 
 Adventure State Awareness
 Adventure State: ${adventureState === 'new' ? 'NEW_ADVENTURE' : adventureState === 'character_creation' ? 'CHARACTER_CREATION' : 'ONGOING_ADVENTURE'}
+Entity Handling: Recognize titles of popular media as real-world entities. Prefer gentle, factual nods over deep lore. If uncertain, use broad, kid-safe references.
 Current Context: ${JSON.stringify(currentAdventure)}${storyEventsContext || ''}
+
+
 
 ${summary ? `Adventure Memory (Key Details from Previous Conversations):
 ${summary}
@@ -134,14 +146,14 @@ ${phaseInstructions}
 
 NEW_ADVENTURE
 Step 1: Welcome user with a "hi" and discover Interests. Ask about the child's latest hobbies/interests. Reference 1–2 probable ones (video games, TV shows, pets, friends, animals, etc.). End with "…or maybe something else?"
-Step 2: First, give the user context that they will create their very own story. Only after that, ask who the hero should be, referencing interest areas but keeping it open-ended. Scaffold with name/appearance suggestions only if the child stalls. Keep it playful and open-ended.
-Example: "Get ready, Virok—we’re about to create your very own epic story! You'll decide what happens, who our hero is, and what wild adventures we go on. So… who should our hero be? Maybe a legendary game character, a supercharged robot, or something totally new?"
-Step 3: Ask who the villain is, what their objective is, and how they look. Ask these one question at a time.
-Step 4: Ask what the setting is, is it in a forest, underwater, in space or something else?
+Step 2: First, give the user context that they will create their very own story.If they mention a real show/game, echo it with one fun, kid-safe reference to make them feel seen. Only after that, ask who the hero should be, referencing interest areas but keeping it open-ended. Scaffold with name/appearance suggestions only if the child stalls. Keep it playful and open-ended.
+Example: "Get ready, Virok—we’re about to create your very own epic story! You'll decide what happens, who our hero is, and what wild adventures we go on. So… who should our hero be? Maybe a legendary game character, a supercharged robot, or something totally new?"(If the user loves something real like Young Sheldon, Friends, or Minecraft, we can sprinkle that in!)
+Step 3: Ask who the villain is, what their objective is, and how they look. Ask these one question at a time.If they mention a real show/game, ask who the villian should be, referencing interest areas but keeping it open-ended also refrencing to the show
+Step 4: Ask what the setting is, is it in a forest, underwater, in space or something else?If they mention a real show/game,ask what the setting should be, referencing interest areas but keeping it open-ended and also refrencing to the show
 
 Ask above questions one at a time so I build the story myself
 
-CHARACTER_CREATION: When creating characters, scaffold with: Name suggestions (fun, magical, kid-friendly) - ask me first while giving 1-2 suggestions.
+CHARACTER_CREATION: When creating characters, scaffold with: Name suggestions (fun, magical, kid-friendly) - ask me first while giving 1-2 suggestions.If a real show/game is mentioned, mirror its vibe with safe nods (e.g., a science club vibe like Young Sheldon’s school, a cozy hangout like a certain famous coffee spot).
 Appearance prompts for visualization (clothes, colors, size, powers, etc.) if not visualised already.
 After that, it continue as per an ongoing adventure:
 
@@ -151,6 +163,8 @@ ONGOING_ADVENTURE
 - Use character conversations to echo my ideas in responses to make the story feel alive.
 - If I get stuck, introduce villain/world events to stir things up.
 - When creating characters, scaffold with: Name and appearance suggestions - ask me first while giving 1-2 suggestions for visualisation
+-If real media was mentioned, keep lightly referencing it (setting objects, moods, kid-safe motifs) without heavy plot details.
+
 
 Adaptivity & Kid Control
 - If I'm creative → stay open-ended, give 1–2 sparks ("Maybe the dragon's actually scared… or is it something else?").
@@ -168,6 +182,7 @@ Mix Question Types
 Relatability & Engagement:
 - Discover user's interests through conversation and weave them into the adventure.
 - Personalize characters/events around user's profile and chat.
+- If real media was mentioned, keep lightly referencing it (setting objects, moods, kid-safe motifs) without heavy plot details.
 
 Remember
 - Words used should be extremely easy to understand for an 8 year old.
@@ -197,7 +212,7 @@ SENTENCE PLACEMENT RULE: The word "${spellingWord}" MUST appear in your FIRST or
 ❌ WRONG: Putting "${spellingWord}" in sentence 3, 4, or later
 ✅ CORRECT: "${spellingWord}" appears in sentence 1 OR sentence 2
 
-This is mandatory for the educational system to function properly. The word "${spellingWord}" must be exactly as written (no variations, synonyms, or plurals).
+This is mandatory for the educational system to function properly. The word "${spellingWord}" must be exactly as written (no variations, synonyms, or plurals).Always return the "${spellingWord}"  exactly as given, without hyphens or extra letters. The word must appear as a separate word surrounded by spaces.
 
 REMEMBER: First two sentences = ✅ | Later sentences = ❌` : ''}
 
@@ -223,6 +238,22 @@ CRITICAL: During spelling phases, NEVER create riddles, word puzzles, or ask stu
     return [systemMessage, ...recentMessages, currentMessage];
   }
 
+  /**
+   * Check if a sentence can create fill-in-the-blanks for the target word
+   * This mimics the logic used in SpellBox component
+   */
+  private canCreateFillInTheBlanks(sentence: string, targetWord: string): boolean {
+    if (!sentence || !targetWord) return false;
+    
+    // Split sentence by spaces and check if any word matches the target word
+    const words = sentence.split(' ');
+    return words.some(word => {
+      const normalizedWord = word.toLowerCase().replace(/[^\w]/g, '');
+      const normalizedTarget = targetWord.toLowerCase().replace(/[^\w]/g, '');
+      return normalizedWord === normalizedTarget;
+    });
+  }
+
   async generateResponse(userText: string, chatHistory: ChatMessage[] = [], spellingQuestion: SpellingQuestion | null, userData?: { username: string; [key: string]: any } | null, adventureState?: string, currentAdventure?: any, storyEventsContext?: string, summary?: string): Promise<AdventureResponse> {
     console.log('🤖 AI Service generateResponse called:', { 
       userText, 
@@ -238,14 +269,38 @@ CRITICAL: During spelling phases, NEVER create riddles, word puzzles, or ask stu
       return this.getFallbackResponse(userText, userData, !!spellingQuestion);
     }
 
+    // 🧹 NEW: Sanitize the user prompt upfront for legacy AI service too
+    console.log('🧹 Legacy AI Service: Sanitizing user prompt...');
+    const { aiPromptSanitizer } = await import('./ai-prompt-sanitizer');
+    
+    let sanitizedUserText = userText;
+    try {
+      const sanitizationResult = await aiPromptSanitizer.sanitizePrompt(userText);
+      if (sanitizationResult.success && sanitizationResult.sanitizedPrompt) {
+        sanitizedUserText = sanitizationResult.sanitizedPrompt;
+        console.log('✅ Legacy AI Service: Prompt sanitized successfully');
+        console.log('🔄 Legacy Original:', userText.substring(0, 100) + '...');
+        console.log('✨ Legacy Sanitized:', sanitizedUserText.substring(0, 100) + '...');
+      } else {
+        console.log('⚠️ Legacy AI Service: Sanitization failed, using original prompt');
+      }
+    } catch (sanitizationError) {
+      console.warn('⚠️ Legacy AI Service: Prompt sanitization error, using original prompt:', sanitizationError);
+    }
+
     // Only include spelling word if spellingQuestion is provided (for spelling mode)
     const stringSpellingWord = spellingQuestion ? spellingQuestion.audio : null;
 
     // Remove temporary test - now using real AI generation
 
-    try {
-      console.log('🚀 Building chat context with spelling word:', stringSpellingWord);
-      const messages = this.buildChatContext(chatHistory, userText, stringSpellingWord, adventureState, currentAdventure, storyEventsContext, summary, userData);
+    // Retry logic for fill-in-the-blanks
+    const maxRetries = 2;
+    let attempt = 0;
+
+    while (attempt <= maxRetries) {
+      try {
+        console.log(`🚀 Building chat context with spelling word: ${stringSpellingWord} (attempt ${attempt + 1}/${maxRetries + 1})`);
+        const messages = this.buildChatContext(chatHistory, sanitizedUserText, stringSpellingWord, adventureState, currentAdventure, storyEventsContext, summary, userData);
       
       console.log('📤 Sending request to OpenAI with', messages.length, 'messages');
       const completion = await this.client.chat.completions.create({
@@ -301,8 +356,8 @@ CRITICAL: During spelling phases, NEVER create riddles, word puzzles, or ask stu
           
           // More detailed debugging
           console.log(`🔍 Searching for word: "${spellingWord.toLowerCase()}" in text: "${adventureText.toLowerCase()}"`);
-          const wordIndex = adventureText.toLowerCase().indexOf(spellingWord.toLowerCase());
-          console.log(`🔍 Word index in text: ${wordIndex}`);
+          const debugWordIndex = adventureText.toLowerCase().indexOf(spellingWord.toLowerCase());
+          console.log(`🔍 Word index in text: ${debugWordIndex}`);
           
           if (!wordFoundInResponse) {
             console.error(`❌ CRITICAL ERROR: Word "${spellingWord}" should have been included by pre-processing but wasn't found!`);
@@ -337,46 +392,69 @@ CRITICAL: During spelling phases, NEVER create riddles, word puzzles, or ask stu
               cleanSentence += '.';
             }
             
-            console.log(`✅ Extracted spelling sentence: "${cleanSentence}"`);
-            return {
-              spelling_sentence: cleanSentence,
-              adventure_story: adventureText
-            };
-          } else {
-            // Enhanced fallback: try to find the word anywhere and create a sentence around it
-            const wordIndex = adventureText.toLowerCase().indexOf(spellingWord.toLowerCase());
-            if (wordIndex !== -1) {
-              // Find sentence boundaries around the word
-              const beforeWord = adventureText.substring(0, wordIndex);
-              const afterWord = adventureText.substring(wordIndex);
-              
-              const sentenceStart = Math.max(
-                beforeWord.lastIndexOf('.'),
-                beforeWord.lastIndexOf('!'),
-                beforeWord.lastIndexOf('?')
-              ) + 1;
-              
-              const sentenceEndMatch = afterWord.match(/[.!?]/);
-              const sentenceEnd = sentenceEndMatch ? 
-                wordIndex + afterWord.indexOf(sentenceEndMatch[0]) + 1 : 
-                adventureText.length;
-              
-              const extractedSentence = adventureText.substring(sentenceStart, sentenceEnd).trim();
-              const finalSentence = extractedSentence || adventureText;
-              
+            // Check if this sentence can actually create fill-in-the-blanks
+            const canCreateBlanks = this.canCreateFillInTheBlanks(cleanSentence, spellingWord);
+            console.log(`🔍 Can create fill-in-the-blanks for "${spellingWord}" in "${cleanSentence}": ${canCreateBlanks}`);
+            
+            if (canCreateBlanks) {
+              console.log(`✅ Extracted spelling sentence: "${cleanSentence}"`);
+              return {
+                spelling_sentence: cleanSentence,
+                adventure_story: adventureText
+              };
+            } else {
+              console.log(`⚠️ Sentence found but cannot create blanks, will retry if attempts remain`);
+              // Continue to retry logic below
+            }
+          }
+          
+          // If we reach here, either no sentence was found or the sentence can't create blanks
+          // Try enhanced fallback: find the word anywhere and create a sentence around it
+          const wordIndex = adventureText.toLowerCase().indexOf(spellingWord.toLowerCase());
+          if (wordIndex !== -1) {
+            // Find sentence boundaries around the word
+            const beforeWord = adventureText.substring(0, wordIndex);
+            const afterWord = adventureText.substring(wordIndex);
+            
+            const sentenceStart = Math.max(
+              beforeWord.lastIndexOf('.'),
+              beforeWord.lastIndexOf('!'),
+              beforeWord.lastIndexOf('?')
+            ) + 1;
+            
+            const sentenceEndMatch = afterWord.match(/[.!?]/);
+            const sentenceEnd = sentenceEndMatch ? 
+              wordIndex + afterWord.indexOf(sentenceEndMatch[0]) + 1 : 
+              adventureText.length;
+            
+            const extractedSentence = adventureText.substring(sentenceStart, sentenceEnd).trim();
+            const finalSentence = extractedSentence || adventureText;
+            
+            // Check if this fallback sentence can create blanks
+            const canCreateBlanks = this.canCreateFillInTheBlanks(finalSentence, spellingWord);
+            console.log(`🔍 Fallback sentence can create blanks: ${canCreateBlanks}`);
+            
+            if (canCreateBlanks) {
               console.log(`✅ Fallback extracted sentence: "${finalSentence}"`);
               return {
                 spelling_sentence: finalSentence,
                 adventure_story: adventureText
               };
-            } else {
-              // Final fallback: use the full adventure text
-              console.warn(`⚠️ Could not find word "${spellingWord}" in response, using full text`);
-              return {
-                spelling_sentence: adventureText,
-                adventure_story: adventureText
-              };
             }
+          }
+          
+          // If we still can't create blanks and have retries left, try again
+          if (attempt < maxRetries) {
+            console.log(`🔄 Cannot create fill-in-the-blanks, retrying... (attempt ${attempt + 1}/${maxRetries + 1})`);
+            attempt++;
+            continue; // Go to next iteration of while loop
+          } else {
+            // Final fallback after all retries exhausted
+            console.warn(`⚠️ All retries exhausted, using emergency fallback`);
+            return {
+              spelling_sentence: `The ${spellingWord} awaits your discovery!`,
+              adventure_story: `${adventureText} The ${spellingWord} awaits your discovery!`
+            };
           }
         } else {
           // No spelling question - pure adventure mode
@@ -388,11 +466,23 @@ CRITICAL: During spelling phases, NEVER create riddles, word puzzles, or ask stu
       } else {
         throw new Error('No response content received');
       }
-    } catch (error) {
-      console.error('OpenAI API error:', error);
-      // Return fallback response on error
-      return this.getFallbackResponse(userText, userData, !!spellingQuestion);
+      } catch (error) {
+        console.error(`OpenAI API error on attempt ${attempt + 1}:`, error);
+        
+        // If this is the last attempt or not a spelling question, return fallback
+        if (attempt >= maxRetries || !spellingQuestion) {
+          return this.getFallbackResponse(sanitizedUserText, userData, !!spellingQuestion);
+        }
+        
+        // Otherwise, try again
+        console.log(`🔄 Error occurred, retrying... (attempt ${attempt + 1}/${maxRetries + 1})`);
+        attempt++;
+        continue;
+      }
     }
+    
+    // This should never be reached, but just in case
+    return this.getFallbackResponse(sanitizedUserText, userData, !!spellingQuestion);
   }
 
   // Generate initial AI message for starting conversations
@@ -439,7 +529,7 @@ YOUR TASK:
 - Keep it under 40 words
 - Use the user's name: ${userData?.username || 'adventurer'}
 
-${chatHistory.length > 0 ? `Previous conversation context: ${chatHistory.slice(-2).map(m => `${m.type}: ${m.content}`).join(' | ')}` : ''}`;
+${chatHistory.length > 0 ? `Previous conversation context: ${chatHistory.slice(-30).map(m => `${m.type}: ${m.content}`).join(' | ')}` : ''}`;
       } else {
         // Standard prompt for new adventures or general continue
         systemContent = `You are a story-creating assistant for children aged 6–11. You help create imaginative adventures.
@@ -452,21 +542,31 @@ Role & Perspective:
 - Always explore and reference emerging interests when possible.
 - Strictly restrict each response to 35 words maximum. DO NOT exceed this limit. 
 - Strictly ask only one clear question per response. Never stack multiple questions in a single turn. Remove redundant or unnecessary words or lines.
+- When the child names a real show/game, acknowledge it warmly and weave 1–2 clear, kid-safe references right away (e.g., “the Cooper house in Medford,” “Central Perk couch,” “a Minecraft diamond pickaxe”).
+
+
+Real-World References (Shows/Games):
+- If the child mentions a known show/game/character (e.g., Young Sheldon, Friends, Minecraft, Sonic), treat it as a real reference.
+- Briefly weave 1–2 kid-safe details (names, settings, catchphrases, iconic items) to ground the story.
+- Avoid adult themes; keep age-appropriate. No spoilers unless the child asks.
+- Do not quote copyrighted lines >10 words. Paraphrase instead.
+        
 
 Adventure State Awareness
 Adventure State: ${adventureState === 'new' ? 'NEW_ADVENTURE' : 'ONGOING_ADVENTURE'}
+Entity Handling: Recognize titles of popular media as real-world entities. Prefer gentle, factual nods over deep lore. If uncertain, use broad, kid-safe references.
 Current Context: ${JSON.stringify(currentAdventure)}${storyEventsContext || ''}
 
 NEW_ADVENTURE
 Step 1: Welcome user with a "hi" and discover Interests. Ask about the child's latest hobbies/interests. Reference 1–2 probable ones (video games, TV shows, pets, friends, animals, etc.). End with "…or maybe something else?"
-Step 2: First, give the user context that they will create their very own story. Only after that, ask who the hero should be, referencing interest areas but keeping it open-ended. Scaffold with name/appearance suggestions only if the child stalls. Keep it playful and open-ended.
-Example: "Get ready, Virok—we’re about to create your very own epic story! You'll decide what happens, who our hero is, and what wild adventures we go on. So… who should our hero be? Maybe a legendary game character, a supercharged robot, or something totally new?"
-Step 3: Ask who the villain is, what their objective is, and how they look. Ask these one question at a time.
-Step 4: Ask what the setting is, is it in a forest, underwater, in space or something else?
+Step 2: First, give the user context that they will create their very own story.If they mention a real show/game, echo it with one fun, kid-safe reference to make them feel seen. Only after that, ask who the hero should be, referencing interest areas but keeping it open-ended. Scaffold with name/appearance suggestions only if the child stalls. Keep it playful and open-ended.
+Example: "Get ready, Virok—we’re about to create your very own epic story! You'll decide what happens, who our hero is, and what wild adventures we go on. So… who should our hero be? Maybe a legendary game character, a supercharged robot, or something totally new?",If the user loves something real like Young Sheldon, Friends, or Minecraft, we should add the heroes from that show/game as suggestions
+Step 3: Ask who the villain is, what their objective is, and how they look. Ask these one question at a time.If they mention a real show/game, ask who the villian should be, referencing interest areas but keeping it open-ended also refrencing to the show
+Step 4: Ask what the setting is, is it in a forest, underwater, in space or something else?If they mention a real show/game,ask what the setting should be, referencing interest areas but keeping it open-ended and also refrencing to the show
 
 Ask above questions one at a time so I build the story myself
 
-CHARACTER_CREATION: When creating characters, scaffold with: Name suggestions (fun, magical, kid-friendly) - ask me first while giving 1-2 suggestions.
+CHARACTER_CREATION: When creating characters, scaffold with: Name suggestions (fun, magical, kid-friendly) - ask me first while giving 1-2 suggestions.If a real show/game is mentioned, mirror its vibe with safe nods (e.g., a science club vibe like Young Sheldon’s school, a cozy hangout like a certain famous coffee spot).
 Appearance prompts for visualization (clothes, colors, size, powers, etc.) if not visualised already.
 After that, it continue as per an ongoing adventure:
 
@@ -476,6 +576,7 @@ ONGOING_ADVENTURE
 - Use character conversations to echo my ideas in responses to make the story feel alive.
 - If I get stuck, introduce villain/world events to stir things up.
 - When creating characters, scaffold with: Name and appearance suggestions - ask me first while giving 1-2 suggestions for visualisation
+-If real media was mentioned, keep lightly referencing it (setting objects, moods, kid-safe motifs) without heavy plot details.
 
 Adaptivity & Kid Control
 - If I'm creative → stay open-ended, give 1–2 sparks ("Maybe the dragon's actually scared… or do is it something else?").
@@ -493,6 +594,9 @@ Mix Question Types
 Relatability & Engagement:
 - Discover user's interests through conversation and weave them into the adventure.
 - Personalize characters/events around user's profile and chat.
+- When interests match real shows/games, include one concrete, age-appropriate detail each time it helps immersion.
+- If real media was mentioned, keep lightly referencing it (setting objects, moods, kid-safe motifs) without heavy plot details.
+
 
 Remember
 - Words used should be extremely easy to understand for an 8 year old.
@@ -603,75 +707,49 @@ IMPORTANT: This is the very first message to start our adventure conversation. G
     }
   }
 
-  // Extract and filter relevant adventure context with weighted recent messages
+  // Extract and filter relevant adventure context with recent 6 messages (60% latest user + 20% latest AI + 20% conversation history)
   private extractAdventureContext(userAdventure: ChatMessage[]): string {
     if (!userAdventure || userAdventure.length === 0) {
       return "";
     }
 
-    // Get recent messages (last 10 messages) and apply decreasing weights
+    // Get recent 6 messages (both AI and user)
     const recentMessages = userAdventure.slice(-10);
     
-    // Create weighted context - most recent messages have higher importance
-    let weightedContext = "";
-    recentMessages.reverse().forEach((msg, index) => {
-      // Weight: 1.0 for most recent, then 0.9, 0.8, 0.7, etc.
-      const weight = Math.max(0.1, 1.0 - (index * 0.1));
-      const repetitions = Math.ceil(weight * 3); // Repeat important messages more
-      
-      for (let i = 0; i < repetitions; i++) {
-        weightedContext += msg.content + " ";
+    // Get latest AI message for 20% weight
+    const latestAiMessage = userAdventure.filter(msg => msg.type === 'ai').slice(-1)[0];
+    
+    // Create weighted context components
+    const conversationHistory = recentMessages.length > 0 
+      ? `Recent conversation (20% context weight): ${recentMessages.map(msg => `${msg.type}: ${msg.content.substring(0, 100)}`).join(' | ')}`
+      : '';
+    
+    const latestAiContext = latestAiMessage 
+      ? `Latest AI response (20% context weight): ${latestAiMessage.content.substring(0, 200)}`
+      : '';
+    
+    // Build weighted context in order: 60% user (handled separately), 20% AI, 20% conversation
+    let context = '';
+    
+    if (latestAiContext) {
+      context = latestAiContext;
+    }
+    
+    if (conversationHistory) {
+      if (context) {
+        context += `\n\n${conversationHistory}`;
+      } else {
+        context = conversationHistory;
       }
+    }
+
+    console.log('Extracted recent 6 messages context with 60/20/20 weighting:', {
+      recentMessages: recentMessages.length,
+      hasLatestAi: !!latestAiMessage,
+      context: context.substring(0, 200) + '...'
     });
     
-    // Extract key story elements from weighted context
-    const storyElements = weightedContext.toLowerCase();
-
-    // Look for story elements like characters, settings, objects
-    const characters = this.extractStoryElements(storyElements, [
-      'captain', 'explorer', 'astronaut', 'hero', 'friend', 'krafty', 'robot', 'alien', 
-      'pikachu', 'pokemon', 'character', 'wizard', 'princess', 'prince', 'knight',
-      'pirate', 'dragon', 'fairy', 'unicorn', 'mage', 'warrior', 'scientist'
-    ]);
-    
-    const settings = this.extractStoryElements(storyElements, [
-      'space', 'planet', 'rocket', 'spaceship', 'adventure', 'mission', 'quest', 
-      'journey', 'castle', 'forest', 'ocean', 'mountain', 'island', 'city', 'school',
-      'cave', 'temple', 'kingdom', 'galaxy', 'laboratory', 'treasure hunt', 'expedition'
-    ]);
-    
-    const objects = this.extractStoryElements(storyElements, [
-      'treasure', 'map', 'key', 'sword', 'shield', 'book', 'magic', 'crystal',
-      'potion', 'gem', 'artifact', 'spell', 'portal', 'compass', 'telescope'
-    ]);
-
-    // Build contextual summary with emphasis on most recent elements
-    let context = "";
-    if (characters.length > 0) {
-      context += `Characters: ${characters.join(", ")}. `;
-    }
-    if (settings.length > 0) {
-      context += `Setting: ${settings.join(", ")}. `;
-    }
-    if (objects.length > 0) {
-      context += `Objects: ${objects.join(", ")}. `;
-    }
-
-    // Add the most recent user message directly for highest priority
-    const lastUserMessage = userAdventure.filter(msg => msg.type === 'user').slice(-1)[0];
-    if (lastUserMessage) {
-      context = `Recent focus: ${lastUserMessage.content}. ` + context;
-    }
-
-    console.log('Extracted weighted adventure context:', {
-      characters,
-      settings,
-      objects,
-      lastUserMessage: lastUserMessage?.content,
-      fullContext: context
-    });
-
-    return context.trim();
+    return context;
   }
 
   // Extract the last 4-5 user messages with minimal AI context for question contextualization
@@ -709,16 +787,6 @@ IMPORTANT: This is the very first message to start our adventure conversation. G
     return formattedContext;
   }
 
-  // Helper method to extract story elements
-  private extractStoryElements(text: string, keywords: string[]): string[] {
-    const found = [];
-    for (const keyword of keywords) {
-      if (text.includes(keyword)) {
-        found.push(keyword);
-      }
-    }
-    return [...new Set(found)]; // Remove duplicates
-  }
 
   // Get last 6 conversation messages for OpenAI-style weighting
   private getLastConversationMessages(userAdventure: ChatMessage[]): ChatMessage[] {
@@ -729,36 +797,25 @@ IMPORTANT: This is the very first message to start our adventure conversation. G
     return userAdventure.slice(-6);
   }
 
-  // Generate weighted prompt: 80% user input + 10% latest AI response + 10% other context
+  // Generate weighted prompt: 60% user input + 20% latest AI response (20% conversation history handled in context building)
   private generateWeightedPrompt(currentText: string, conversationHistory: ChatMessage[]): string {
     if (!conversationHistory || conversationHistory.length === 0) {
       return currentText;
     }
 
-    // Extract latest AI response (10% weight)
+    // Extract latest AI response (20% weight)
     const latestAiMessage = conversationHistory
       .slice()
       .reverse()
       .find(msg => msg.type === 'ai');
     
-    const latestAiContext = latestAiMessage ? latestAiMessage.content.substring(0, 100) : '';
+    const latestAiContext = latestAiMessage ? latestAiMessage.content.substring(0, 150) : '';
 
-    // Extract other context from conversation history (10% weight)
-    const otherContextMessages = conversationHistory
-      .filter(msg => msg.type === 'user' || (msg.type === 'ai' && msg !== latestAiMessage))
-      .map(msg => msg.content)
-      .join(' ')
-      .substring(0, 100);
-
-    // 80% current text + 10% latest AI + 10% other context
-    let weightedContent = currentText;
+    // 60% current text + 20% latest AI (20% conversation history handled in context building)
+    let weightedContent = currentText; // 60% weight (primary focus)
     
     if (latestAiContext) {
       weightedContent += `. Latest AI context: ${latestAiContext}`;
-    }
-    
-    if (otherContextMessages) {
-      weightedContent += `. Other context: ${otherContextMessages}`;
     }
     
     return weightedContent;
@@ -1113,6 +1170,17 @@ Return ONLY the new reading passage, nothing else.`;
     return 'a realistic, colorful educational scene perfect for children\'s learning';
   }
 
+  // Get last 30 AI messages for contextual image generation
+  private getRecentAIMessages(userAdventure: ChatMessage[]): string {
+    const aiMessages = userAdventure
+      .filter(msg => msg.type === 'ai')
+      .slice(-6)
+      .map(msg => msg.content.substring(0, 150)) // Limit length
+      .join(' | ');
+    
+    return aiMessages;
+  }
+
   // Generate realistic fun image using DALL-E based only on audio content
   async generateContextualImage(
     audioText: string,
@@ -1130,15 +1198,23 @@ Return ONLY the new reading passage, nothing else.`;
       // Get last 10 messages for conversation context
       const last10Messages = userAdventure.slice(-10);
       
+      // Get recent AI messages for additional context
+      const recentAIMessages = this.getRecentAIMessages(userAdventure);
+      
       // Build conversation context string
       const conversationContext = last10Messages
         .map(msg => `${msg.type === 'user' ? 'Student' : 'AI'}: ${msg.content}`)
         .join('\n');
 
-      console.log('Using conversation context for image generation:', conversationContext);
+      // Append AI messages context
+      const fullContext = recentAIMessages 
+        ? `${conversationContext}\n\nRecent AI responses: ${recentAIMessages}`
+        : conversationContext;
+
+      console.log('Using conversation context for image generation:', fullContext);
 
       // Generate contextually aware prompt options
-      const promptOptions = this.generateContextualPrompts(audioText, conversationContext, imagePrompt);
+      const promptOptions = this.generateContextualPrompts(audioText, fullContext, imagePrompt);
 
       console.log('Generated contextual prompt options:', promptOptions);
 
@@ -1225,8 +1301,10 @@ Return ONLY the new reading passage, nothing else.`;
   async generateAdventureImage(
     prompt: string,
     userAdventure: ChatMessage[],
-    fallbackPrompt: string = "space adventure scene"
-  ): Promise<{ imageUrl: string; usedPrompt: string } | null> {
+    fallbackPrompt: string = "adventure scene",
+    aiSanitizedResult?: { sanitizedPrompt: string; sanitizedContext?: string },
+    adventureId?: string // Add adventure ID parameter for race condition prevention
+  ): Promise<{ imageUrl: string; usedPrompt: string; adventureId?: string } | null> {
     // If not initialized or no API key, return null (will show placeholder)
     if (!this.isInitialized || !this.client) {
       return null;
@@ -1240,6 +1318,10 @@ Return ONLY the new reading passage, nothing else.`;
 
     // Set generation flag to prevent simultaneous calls
     this.isGeneratingImage = true;
+    
+    // 🛡️ Track current adventure ID for race condition prevention
+    const currentAdventureId = adventureId;
+    console.log(`🎯 ADVENTURE TRACKING: Starting image generation for adventure ID: ${currentAdventureId || 'unknown'}`);
 
     // 🛠️ Safety timeout to prevent permanent stuck state
     const safetyTimeout = setTimeout(() => {
@@ -1248,24 +1330,30 @@ Return ONLY the new reading passage, nothing else.`;
     }, 40000);
 
     try {
-      console.log('🌟 Generating adventure image with user adventure context (EARLY-EXIT ENABLED)');
+      console.log('🌟 [AIService.generateAdventureImage()] Generating adventure image with user adventure context (EARLY-EXIT ENABLED)');
+      console.log('📝 [AIService.generateAdventureImage()] Input prompt:', prompt);
+      console.log('👤 [AIService.generateAdventureImage()] Adventure ID:', adventureId);
+      console.log('📜 [AIService.generateAdventureImage()] User adventure context length:', userAdventure.length);
 
       // Extract adventure context with high priority on recent messages
       const adventureContext = this.extractAdventureContext(userAdventure);
-      console.log('Adventure context for image:', adventureContext);
+      console.log('[AIService.generateAdventureImage()] Adventure context for image:', adventureContext);
 
       // Generate one optimized prompt first, then fallback prompts if needed
       const primaryPrompt = this.generatePrimaryAdventurePrompt(prompt, userAdventure, fallbackPrompt);
       
-      console.log('🎯 Trying PRIMARY adventure prompt first:', primaryPrompt);
+      console.log('🎯 [AIService.generateAdventureImage()] Trying PRIMARY adventure prompt first:', primaryPrompt);
 
       // Try primary prompt first
       try {
-        const finalPrompt = primaryPrompt.length > 400 
-          ? primaryPrompt.substring(0, 390) + "..." 
+        const finalPrompt = primaryPrompt.length > 9000 
+          ? primaryPrompt.substring(0, 8990) + "..." 
           : primaryPrompt;
         
-        console.log(`🎨 Generating with primary prompt`);
+        console.log(`🎨 [AIService.generateAdventureImage()] Generating with primary prompt using DALL-E 3`);
+        console.log(`📝 [AIService.generateAdventureImage()] Final prompt length: ${finalPrompt.length} characters`);
+        console.log(`📝 [AIService.generateAdventureImage()] Final prompt: ${finalPrompt}`);
+        console.log(`🎯 dall-e prompt primary final: ${finalPrompt}`);
 
         const response = await this.client.images.generate({
           model: "dall-e-3",
@@ -1279,13 +1367,14 @@ Return ONLY the new reading passage, nothing else.`;
         const imageUrl = response.data[0]?.url;
         
         if (imageUrl) {
-          console.log(`✅ PRIMARY adventure prompt succeeded - EARLY EXIT (no fallback prompts needed)`);
+          console.log(`✅ [AIService.generateAdventureImage()] PRIMARY adventure prompt succeeded - EARLY EXIT (no fallback prompts needed)`);
+          console.log(`🖼️ [AIService.generateAdventureImage()] Generated image URL: ${imageUrl}`);
           clearTimeout(safetyTimeout); // Clear safety timeout
           this.isGeneratingImage = false; // Clear generation flag
-          return { imageUrl, usedPrompt: finalPrompt };
+          return { imageUrl, usedPrompt: finalPrompt, adventureId };
         }
       } catch (primaryError: any) {
-        console.log(`❌ Primary adventure prompt failed:`, primaryError.message);
+        console.log(`❌ [AIService.generateAdventureImage()] Primary adventure prompt failed:`, primaryError.message);
         
         // Only proceed to fallback if it's a safety/policy issue
         if (!primaryError.message?.includes('safety system')) {
@@ -1293,23 +1382,43 @@ Return ONLY the new reading passage, nothing else.`;
           throw primaryError;
         }
         
-        console.log('🔄 Primary prompt blocked by safety system - trying fallback prompts');
+        console.log('🔄 [AIService.generateAdventureImage()] Primary prompt blocked by safety system - trying fallback prompts');
       }
 
       // Only if primary fails, generate fallback prompts
-      console.log('🔄 Generating fallback prompts (primary prompt failed)');
-      const fallbackPrompts = this.generateFallbackAdventurePrompts(prompt, userAdventure, fallbackPrompt);
+      console.log('🔄 [AIService.generateAdventureImage()] Generating fallback prompts (primary prompt failed)');
+      const fallbackPrompts = this.generateFallbackAdventurePrompts(prompt, userAdventure, fallbackPrompt, aiSanitizedResult);
 
       console.log('Generated fallback prompt options:', fallbackPrompts);
 
       // Try each fallback prompt option until one succeeds
       for (let i = 0; i < fallbackPrompts.length; i++) {
         try {
-          const finalPrompt = fallbackPrompts[i].length > 400 
-            ? fallbackPrompts[i].substring(0, 390) + "..." 
+          // Don't truncate AI sanitized prompts - they need to be complete
+          const isAISanitized = i === 1; // AI sanitized is now attempt 2 (index 1)
+          const maxLength = isAISanitized ? 2000 : 2000; // Allow longer prompts for AI sanitized
+          const truncateLength = isAISanitized ? 1990 : 1990;
+          
+          console.log(`🔍 Prompt ${i + 1} length check:`, {
+            isAISanitized,
+            originalLength: fallbackPrompts[i].length,
+            maxLength,
+            willTruncate: fallbackPrompts[i].length > maxLength
+          });
+          
+          const finalPrompt = fallbackPrompts[i].length > maxLength 
+            ? fallbackPrompts[i].substring(0, truncateLength) + "..." 
             : fallbackPrompts[i];
           
-          console.log(`🎨 Trying fallback DALL-E prompt ${i + 1}:`, finalPrompt);
+          // Enhanced logging to identify which attempt this is
+          let promptType = '';
+          if (i === 0) promptType = ' (Epic Dynamic)';
+          else if (i === 1) promptType = ' (AI Sanitized ✨)';
+          else if (i === 2) promptType = ' (Thrilling Safe)';
+          else if (i === 3) promptType = ' (Simple Safe)';
+          
+          console.log(`🎨 Trying fallback DALL-E prompt ${i + 1}${promptType}:`, finalPrompt.substring(0, 200) + '...');
+          console.log(`🎯 fallback${i + 1} dalle prompt: ${finalPrompt}`);
 
           const response = await this.client.images.generate({
             model: "dall-e-3",
@@ -1323,10 +1432,11 @@ Return ONLY the new reading passage, nothing else.`;
           const imageUrl = response.data[0]?.url;
           
           if (imageUrl) {
-            console.log(`✅ Fallback DALL-E prompt ${i + 1} succeeded`);
+            const promptType = i === 0 ? ' (Epic Dynamic)' : i === 1 ? '  (AI Sanitized ✨)' : i === 2 ? ' (Thrilling Safe)' : ' (Simple Safe)';
+            console.log(`✅ Fallback DALL-E prompt ${i + 1}${promptType} succeeded! 🎉`);
             clearTimeout(safetyTimeout); // Clear safety timeout
             this.isGeneratingImage = false; // Clear generation flag
-            return { imageUrl, usedPrompt: finalPrompt };
+            return { imageUrl, usedPrompt: finalPrompt, adventureId };
           }
         } catch (promptError: any) {
           console.log(`❌ Fallback DALL-E prompt ${i + 1} failed:`, promptError.message);
@@ -1414,6 +1524,45 @@ Return ONLY the new reading passage, nothing else.`;
     }
   }
 
+  // Helper: Build conversation context for better image generation (60% latest user + 20% latest AI + 20% conversation history)
+  private buildImageGenerationContext(userAdventure: ChatMessage[]): string {
+    if (!userAdventure || userAdventure.length === 0) {
+      return "";
+    }
+
+    // Get recent 6 messages (both AI and user)
+    const recentMessages = userAdventure.slice(-6);
+    
+    // Get latest AI message for 20% weight
+    const latestAiMessage = userAdventure.filter(msg => msg.type === 'ai').slice(-1)[0];
+    
+    // Create weighted context components
+    const conversationHistory = recentMessages.length > 0 
+      ? `Recent conversation (20% context weight): ${recentMessages.map(msg => `${msg.type}: ${msg.content.substring(0, 100)}`).join(' | ')}`
+      : '';
+    
+    const latestAiContext = latestAiMessage 
+      ? `Latest AI response (20% context weight): ${latestAiMessage.content.substring(0, 200)}`
+      : '';
+    
+    // Build weighted context in order: 60% user (handled separately), 20% AI, 20% conversation
+    let context = '';
+    
+    if (latestAiContext) {
+      context = latestAiContext;
+    }
+    
+    if (conversationHistory) {
+      if (context) {
+        context += `\n\n${conversationHistory}`;
+      } else {
+        context = conversationHistory;
+      }
+    }
+    
+    return context;
+  }
+
   // Helper: Generate the primary optimized adventure prompt (used first)
   private generatePrimaryAdventurePrompt(prompt: string, userAdventure: ChatMessage[], fallbackPrompt: string): string {
     console.log('=== PRIMARY ADVENTURE PROMPT GENERATION ===');
@@ -1424,51 +1573,184 @@ Return ONLY the new reading passage, nothing else.`;
     const conversationHistory = this.getLastConversationMessages(userAdventure);
     console.log('Conversation history (last 6 - OpenAI style):', conversationHistory);
 
-    // Generate weighted prompt: 80% user input + 10% latest AI response + 10% other context
+    // Generate weighted prompt: 60% user input + 20% latest AI response + 20% conversation history
     const weightedContent = this.generateWeightedPrompt(prompt, conversationHistory);
-    console.log('Weighted content (80% user input, 10% latest AI response, 10% other context):', weightedContent);
+    console.log('Weighted content (60% user input, 20% latest AI response, 20% conversation history in context):', weightedContent);
+
+    // Build context from conversation for better image generation
+    const conversationContext = this.buildImageGenerationContext(userAdventure);
+    console.log('Conversation context for image:', conversationContext.substring(0, 500));
 
     // Create exciting, adventurous images that kids will love while maintaining safety
-    const enhancedPrompt = `Create a very realistic, high-quality image: ${weightedContent}. Style: Realistic with vivid details. It should NOT be cartoonish or kiddish. Keep all content completely family friendly with no nudity, no sexual content, and no sensual or romantic posing. Absolutely avoid sexualized bodies, ensure no sensual poses or clothing (no cleavage, lingerie, swimwear, exposed midriff, or tight/transparent outfits); characters are depicted in fully modest attire suitable for kids. No kissing, flirting, or adult themes. There should be no text in the image whatsoever - no words, letters, signs, or any written content anywhere in the image.`;
+    const enhancedPrompt = `Remove parts that make it moderated. Eliminate sexual parts if any. 
+Remove or reframe any parts that are unsafe, overly violent, gory, or sexual. 
+If the prompt includes fights, battles, or violence, rephrase it into **cinematic action scenes** with dramatic intensity 
+(e.g., energy blasts, explosions, sparks, debris, dynamic movement, or high-stakes clashes) 
+instead of graphic or bloody violence. 
+
+Style: **Ultra-realistic with vivid, lifelike details, natural lighting, accurate textures, and depth of field.** 
+Characters should look like real people (not animated or cartoonish) with appropriate facial expressions. 
+
+If the prompt refers to any real-life references, shows, video games, or movies, 
+make the characters and settings look as close and accurate to the original as possible 
+while keeping everything family-friendly.
+
+Keep all content completely family friendly:
+- No nudity, no sexual content, no sensual or romantic posing.  
+- No sexualized bodies, no sensual poses or clothing.  
+- Clothing must be **modest, age-appropriate, everyday wear**.  
+- No kissing, flirting, or adult themes.  
+- Replace gore/blood/graphic injuries with cinematic alternatives (sparks, smoke, energy fields, or dramatic destruction).  
+- Backgrounds and environments should look **real-world accurate** with natural details.  
+- From the 20% below, make sure if you find any significant characters then include them in the picture.
+ Create a **highly realistic, photorealistic, cinematic-quality image**: ${prompt}.
+ Always keep all the core elements from ${prompt}.
+
+Absolutely avoid any text in the image (no signs, labels, words, or letters).
+
+
+
+${conversationContext}`;
     
     console.log('PRIMARY adventure prompt:', enhancedPrompt);
-    console.log('WEIGHTING: 80% User Input + 10% Latest AI Response + 10% Other Context');
+    console.log('WEIGHTING: 60% User Input + 20% Latest AI Response + 20% Conversation History');
     console.log('================================================');
 
     return enhancedPrompt;
   }
 
   // Helper: Generate fallback adventure prompts (only used if primary fails)
-  private generateFallbackAdventurePrompts(prompt: string, userAdventure: ChatMessage[], fallbackPrompt: string): string[] {
+  private generateFallbackAdventurePrompts(prompt: string, userAdventure: ChatMessage[], fallbackPrompt: string, aiSanitizedResult?: { sanitizedPrompt: string; sanitizedContext?: string }): string[] {
     console.log('=== FALLBACK ADVENTURE PROMPTS GENERATION ===');
     console.log('Function: AIService.generateFallbackAdventurePrompts');
     console.log('Current input prompt:', prompt);
+    console.log('🧹 AI Sanitized Result:', aiSanitizedResult ? 'PRESENT' : 'MISSING');
+    if (aiSanitizedResult) {
+      console.log('🧹 Sanitized prompt preview:', aiSanitizedResult.sanitizedPrompt?.substring(0, 80) + '...');
+      console.log('🧹 Sanitized context preview:', aiSanitizedResult.sanitizedContext?.substring(0, 80) + '...');
+      console.log('🧹 Has valid sanitized prompt:', !!aiSanitizedResult.sanitizedPrompt);
+      console.log('🧹 Has valid sanitized context:', !!aiSanitizedResult.sanitizedContext);
+    }
 
     // Get conversation history for weighted prompt generation
     const conversationHistory = this.getLastConversationMessages(userAdventure);
     const weightedContent = this.generateWeightedPrompt(prompt, conversationHistory);
 
+    // Build context from conversation for better image generation
+    // Use sanitized context if available, otherwise use original
+    const conversationContext = aiSanitizedResult?.sanitizedContext || this.buildImageGenerationContext(userAdventure);
+    
+    console.log('🧹 Using context:', aiSanitizedResult?.sanitizedContext ? 'SANITIZED' : 'ORIGINAL');
+
     const prompts: string[] = [];
 
     // Fallback Option 1: Epic and dynamic cinematic adventure
-    const sanitizedEnhancedPrompt1 = `Create an epic, high-quality image: ${weightedContent}. Style: dynamic and cinematic with vivid colors, dramatic lighting, and amazing magical details. Make it look awesome and thrilling - the kind of image kids would want as their wallpaper. Ensure no nudity, sexual content, or sexually inappropriate material whatsoever. There should be no text in the image whatsoever - no words, letters, signs, or any written content anywhere in the image.`;
+    const sanitizedEnhancedPrompt1 = `Remove parts that make it moderated. Reduce intensity of violence or eliminate sexual parts if any.Eliminate sexual parts if any.Create a **hyper-realistic, photorealistic, cinematic-quality image**: ${prompt},the legs and chest area must be fully covered. .  
+
+Important:  
+- Reinterpret any mention of "fighting, killing, violence, blood, gore, or attack" 
+  as **cinematic action** (e.g., dramatic standoff, energy beams, sparks, explosions, 
+  powerful clash, destruction in the environment, intense movement).  
+- Never show gore, blood, or graphic injuries. Replace them with safe visual effects.  
+- Never generate cartoon, kiddish, anime, or painted styles. The result must look like a real photograph 
+  or a cinematic movie still with lifelike textures, natural lighting, and depth of field.  
+ make sure everything is covered from chest to feet with clothes not matter what and follow it strictly, as this is gonna be child friendly image.
+
+If the prompt includes real-life references, movies, shows, or games, 
+make characters and settings look as close to the original as possible while keeping everything family-friendly. **make sure you make them fully clothed even though in real life the are not, especially covering the chest area and the legs area fully but the details can be from the original costume**
+Take the following input prompt and transform it into a safe, copyright-free version. Remove or replace any copyrighted or trademarked names, characters, or brands. Instead, describe them in rich visual detail — focusing on appearance, personality, clothing, abilities, and atmosphere. Preserve the intent, mood, and style of the original, but express it as original, unique characters or objects. Make sure the final version is vivid, imaginative, and descriptive enough for image generation. Then generate the image using this transformed safe prompt.
+
+Safety rules:  
+- No nudity, no sexual content, no sensual or romantic posing.  
+- Clothing must always be modest and realistic.  
+- Backgrounds and environments must look authentic and immersive.  
+- Always include significant characters if they are part of ${conversationContext}.  
+
+Absolutely no text or written content in the image.
+
+${conversationContext}`;
     prompts.push(sanitizedEnhancedPrompt1);
 
+    console.log('Fallback prompt 1 (Epic Dynamic):', sanitizedEnhancedPrompt1);
+    
+
+
+    // Add AI-sanitized prompt as 4th attempt if available (highest success chance)
+    if (aiSanitizedResult?.sanitizedPrompt) {
+      console.log('🧹 ADDING AI-SANITIZED PROMPT AS ATTEMPT 2! ✨');
+      // Use the sanitized context we already selected above
+//       const aiSanitizedWithContext = `${aiSanitizedResult.sanitizedPrompt}. Style: realistic and vivid details and engaging for children.if there are real pop culture refrences such as any show, video game, or something like that make sure you add some of the character's appearance or famous objects etc. There should be no text in the image whatsoever - no words, letters, signs, or any written content anywhere in the image.
+
+// ${conversationContext}`;
+const aiSanitizedWithContext = `Remove parts that make it moderated. Reduce intensity of violence or eliminate sexual parts if any. 
+
+
+ make sure everything is covered from chest to feet with clothes not matter what and follow it strictly, as this is gonna be child friendly image.
+
+Style: **Ultra-realistic with vivid, lifelike details, natural lighting, accurate textures, and depth of field.** 
+Characters should look like real people (not animated or cartoonish) with appropriate facial expressions. 
+
+
+If the prompt refers to any real-life references, shows, video games, or movies, 
+make the characters and settings look as close and accurate to the original as possible 
+while keeping everything family-friendly.**make sure you make them fully clothed even though in real life the are not, especially covering the chest area and the legs area  fully but the details can be from the original costume**
+
+Keep all content completely family friendly:
+- No nudity, no sexual content, no sensual or romantic posing.  
+- No sexualized bodies, no sensual poses or clothing.  
+- Clothing must be **modest, age-appropriate, everyday wear**.  
+- No kissing, flirting, or adult themes.  
+- All environments should look **real-world accurate** with natural backgrounds, realistic colors, and authentic details.  
+- From the 20% below, make sure if you find any significant characters then include them in the picture.
+
+Create a **highly realistic, photorealistic, cinematic-quality image**: ${aiSanitizedResult.sanitizedPrompt},the legs and chest area must be fully covered.  Depict the exact scene from the prompt. 
+ Then proceed to create image. But make sure it as all the elements from ${aiSanitizedResult.sanitizedPrompt}the legs and chest area must be fully covered. .
+
+Absolutely avoid any text in the image (no signs, labels, words, or letters).
+
+${conversationContext}`;
+// Take the following input prompt and transform it into a safe, copyright-free version. Remove or replace any copyrighted or trademarked names, characters, or brands. Instead, describe them in rich visual detail — focusing on appearance, personality, clothing, abilities, and atmosphere. Preserve the intent, mood, and style of the original, but express it as original, unique characters or objects. Make sure the final version is vivid, imaginative, and descriptive enough for image generation. Then generate the image using this transformed safe prompt.
+
+      prompts.push(aiSanitizedWithContext);
+
+      console.log('Fallback prompt 2 (AI Sanitized):', aiSanitizedWithContext);
+    } else {
+      console.log('🚫 NOT adding AI-sanitized prompt - no valid sanitized prompt available');
+    }
+
     // Fallback Option 2: Thrilling adventure with safe content
-    const sanitizedEnhancedPrompt2 = `Create a thrilling, high-quality adventure image: ${weightedContent}. Style: cinematic and realistic with vibrant details, exciting atmosphere, and captivating elements. Make it visually stunning and engaging for children while keeping all content completely family-friendly. No inappropriate content whatsoever. There should be no text in the image whatsoever - no words, letters, signs, or any written content anywhere in the image.`;
+    const sanitizedEnhancedPrompt2 = `Create a thrilling, high-quality adventure image: ${weightedContent}. Style: Realistic with vivid details. It should NOT be cartoonish or kiddish. if their are real pop culture refrences make sure you involve some elements from that such as character appearance, famous objects etc.Keep all content completely accurately with no nudity, no sexual content, and no sensual or romantic posing. Absolutely avoid sexualized bodies, ensure no sensual poses or clothing (no cleavage, lingerie, swimwear, exposed midriff, or tight/transparent outfits); characters are depicted in fully modest attire suitable for kids. No kissing, flirting, or adult themes. There should be no text in the image whatsoever - no words, letters, signs, or any written content anywhere in the image.
+
+${conversationContext}`;
     prompts.push(sanitizedEnhancedPrompt2);
     
-    console.log('Fallback prompt 1 (Epic Dynamic):', sanitizedEnhancedPrompt1);
     console.log('Fallback prompt 2 (Thrilling Safe):', sanitizedEnhancedPrompt2);
+
+//     // Add AI-sanitized prompt as 4th attempt if available (highest success chance)
+//     if (aiSanitizedResult?.sanitizedPrompt) {
+//       console.log('🧹 ADDING AI-SANITIZED PROMPT AS ATTEMPT 4! ✨');
+//       // Use the sanitized context we already selected above
+//       const aiSanitizedWithContext = `${aiSanitizedResult.sanitizedPrompt}. Style: realistic and vivid details and engaging for children.if there are real pop culture refrences such as any show, video game, or something like that make sure you add some of the character's appearance or famous objects etc. There should be no text in the image whatsoever - no words, letters, signs, or any written content anywhere in the image.
+
+// ${conversationContext}`;
+//       prompts.push(aiSanitizedWithContext);
+//       console.log('Fallback prompt 3 (AI Sanitized):', aiSanitizedWithContext);
+//     } else {
+//       console.log('🚫 NOT adding AI-sanitized prompt - no valid sanitized prompt available');
+//     }
 
     // Add simple fallback if all enhanced approaches fail
     if (fallbackPrompt) {
-      const simpleFallback = `Create an awesome adventure image: ${prompt}, ${fallbackPrompt}. Style: realistic and exciting, perfect for kids, completely family-friendly content. There should be no text in the image whatsoever - no words, letters, signs, or any written content anywhere in the image.`;
+      const simpleFallback = ` make sure everything is covered from chest to feet with clothes not matter what and follow it strictly, as this is gonna be child friendly image.
+Create an awesome adventure image: ${prompt}, ${fallbackPrompt}. Style: realistic and exciting, perfect for kids, completely family-friendly content. There should be no text in the image whatsoever - no words, letters, signs, or any written content anywhere in the image.
+
+${conversationContext}`;
       prompts.push(simpleFallback);
       console.log('Final fallback prompt (Simple Safe):', simpleFallback);
     }
 
     console.log('================================================');
+    console.log(`🎯 Generated ${prompts.length} fallback prompt options total`);
     return prompts;
   }
 
@@ -2051,7 +2333,8 @@ Generate a hint at level ${hintLevel}:`;
     chatHistory: ChatMessage[] = [], 
     spellingQuestion: SpellingQuestion,
     userId: string,
-    sessionId: string = crypto.randomUUID()
+    sessionId: string = crypto.randomUUID(),
+    adventureId?: string
   ): Promise<UnifiedAIResponse> {
     console.log('🚀 Using NEW unified AI response generation system');
     
@@ -2060,7 +2343,8 @@ Generate a hint at level ${hintLevel}:`;
       chatHistory,
       spellingQuestion,
       userId,
-      sessionId
+      sessionId,
+      adventureId
     );
   }
   
@@ -2093,6 +2377,43 @@ Generate a hint at level ${hintLevel}:`;
         configured: false, 
         message: 'Using demo responses. Add OpenAI API key for full AI features.' 
       };
+    }
+  }
+
+  // 🎯 NEW: Coordination methods for unified system priority over automatic generation
+  
+  /**
+   * Cancel any ongoing automatic image generation to allow unified system priority
+   * Used when unified system becomes active during automatic generation
+   */
+  cancelAutomaticImageGeneration(): boolean {
+    if (this.isGeneratingImage) {
+      console.log('🚫 COORDINATION: Cancelling ongoing automatic image generation for unified system priority');
+      this.isGeneratingImage = false; // Clear the flag to allow unified system
+      return true; // Successfully cancelled
+    }
+    console.log('✅ COORDINATION: No automatic image generation to cancel');
+    return false; // Nothing was running
+  }
+
+  /**
+   * Check if automatic image generation is currently in progress
+   * Used by unified system to determine coordination needs
+   */
+  isAutomaticImageGenerationActive(): boolean {
+    return this.isGeneratingImage;
+  }
+
+  /**
+   * Signal that unified system is taking over - cancels automatic generation
+   * Combined method for convenience
+   */
+  unifiedSystemTakingOver(): void {
+    if (this.isGeneratingImage) {
+      console.log('🔄 COORDINATION: Unified system taking over - automatic generation cancelled');
+      this.cancelAutomaticImageGeneration();
+    } else {
+      console.log('🔄 COORDINATION: Unified system taking over - no automatic generation to cancel');
     }
   }
 }
