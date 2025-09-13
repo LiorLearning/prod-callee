@@ -3,6 +3,11 @@ import { useCoins } from '@/pages/coinSystem';
 import { ttsService } from '@/lib/tts-service';
 import { useTTSSpeaking } from '@/hooks/use-tts-speaking';
 import { usePetData } from '@/lib/pet-data-service';
+import { usePetVoiceInteraction } from '@/hooks/use-pet-voice-interaction';
+import { useAuth } from '@/hooks/use-auth';
+import { useUnifiedAIStreaming } from '@/hooks/use-unified-ai-streaming';
+import pupClose from '@/assets/pup-close.png';
+import pupOpen from '@/assets/pup-open.png';
 
 type Props = {};
 
@@ -31,7 +36,10 @@ export function PetPage({}: Props): JSX.Element {
   const [previousCoinsSpentForStage, setPreviousCoinsSpentForStage] = useState(0);
   const [showPetShop, setShowPetShop] = useState(false);
   const [lastSpokenMessage, setLastSpokenMessage] = useState('');
-  
+  const [transcribedMessage, setTranscribedMessage] = useState('');
+  const [aiResponse, setAiResponse] = useState(''); // Add this line
+  const [isBlinking, setIsBlinking] = useState(false);
+
   // Streak system for dog evolution unlocks - based on consecutive calendar days (US timezone)
   const [currentStreak, setCurrentStreak] = useState(() => {
     try {
@@ -45,6 +53,115 @@ export function PetPage({}: Props): JSX.Element {
       return 0;
     }
   });
+
+  // Get user ID for voice interaction
+  const { user } = useAuth();
+
+  // Voice interaction state
+  const {
+    isListening,
+    isProcessing,
+    isSpeaking: isVoiceSpeaking,
+    startListening,
+    cancelListening,
+    processVoiceInput,
+    stopAll,
+    transcribedText
+  } = usePetVoiceInteraction({
+    userId: user?.uid || 'anonymous',
+    voiceId: 'cgSgspJ2msm6clMCkdW9', // Jessica voice for now
+    stability: 0.7,
+    similarityBoost: 0.8,
+    speed: 0.9
+  });
+
+  // Add effect to update transcribed message when transcribedText changes
+  useEffect(() => {
+    setTranscribedMessage(transcribedText);
+  }, [transcribedText]);
+
+  // Get the unified AI streaming service
+  const { sendMessage } = useUnifiedAIStreaming({
+    userId: user?.uid || 'anonymous',
+    onResponseComplete: (response) => {
+      if (response?.textContent) {
+        setAiResponse(response.textContent);
+      }
+    }
+  });
+
+  // Update the voice action handler
+  const handleActionClick = (actionId: string) => {
+    if (actionId === 'voice') {
+      if (isListening) {
+        // When stopping, first cancel listening then process the voice input
+        cancelListening();
+        processVoiceInput().then(async () => {
+          if (transcribedText) {
+            // Create a pet-specific prompt
+            const petPrompt = `I am ${currentPet === 'dog' ? 'April the dog' : currentPet === 'bobo' ? 'Bobo the monkey' : 'Feather the bird'}. I am your virtual pet friend. You just said: "${transcribedText}". I should respond in a friendly, playful way that matches my personality. If you ask about my feelings, I should reference my current state (based on coins spent: ${getCurrentPetCoinsSpent()}/50 coins spent on feeding).`;
+            
+            try {
+              const response = await sendMessage(
+                petPrompt,
+                [], // Empty chat history for now
+                {} as any // No spelling question for pet interactions
+              );
+              
+              if (response?.textContent) {
+                setAiResponse(response.textContent);
+              }
+            } catch (error) {
+              console.error('Failed to get AI response:', error);
+            }
+          }
+        });
+      } else {
+        setTranscribedMessage(''); // Clear previous message
+        setAiResponse(''); // Clear previous AI response
+        startListening();
+      }
+      return;
+    }
+
+    // Don't deduct coins for "More" action - always open pet shop
+    if (actionId === 'more') {
+      // Stop any current audio when opening pet shop
+      ttsService.stop();
+      setShowPetShop(true);
+      return;
+    }
+
+    // Check if player has enough coins for feeding actions
+    if (!hasEnoughCoins(10)) {
+      alert("Not enough coins! You need 10 coins to perform this action.");
+      return;
+    }
+
+    // Play feeding sound
+    playFeedingSound();
+
+    // Deduct coins and increase care level
+    spendCoins(10);
+    setCareLevel(Math.min(careLevel + 1, 6), currentStreak); // Max 6 actions, pass current streak
+    
+    // Track coins spent on current pet
+    addPetCoinsSpent(currentPet, 10);
+    
+    // Update streak based on calendar days
+    const newStreak = updateStreak();
+
+    // Trigger heart animation
+    setShowHeartAnimation(true);
+    setTimeout(() => setShowHeartAnimation(false), 1000);
+
+    // Update action status to happy
+    setActionStates(prev => prev.map(action => 
+      action.id === actionId 
+        ? { ...action, status: 'happy' }
+        : action
+    ));
+  };
 
   // Get current date in US timezone (Eastern Time)
   const getCurrentUSDate = () => {
@@ -146,56 +263,44 @@ export function PetPage({}: Props): JSX.Element {
     // Initialize previous coins spent for current stage
     setPreviousCoinsSpentForStage(getCoinsSpentForCurrentStage(currentStreak));
   }, []);
-  
+
   // TTS message ID for tracking speaking state
   const petMessageId = 'pet-message';
   const isSpeaking = useTTSSpeaking(petMessageId);
-  
-  // Pet action states
+
+  // Waveform Visualizer Component
+  const WaveformVisualizer = () => {
+    return (
+      <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 rounded-xl border border-foreground/30 w-64 bg-white/90 backdrop-blur-sm text-sm h-9 focus:border-foreground/60 flex items-center justify-center gap-1 px-4 shadow-lg">
+        {[...Array(10)].map((_, i) => (
+          <div
+            key={i}
+            className="w-1 bg-primary rounded-full animate-pulse"
+            style={{
+              height: `${Math.random() * 16 + 6}px`,
+              animationDelay: `${i * 0.1}s`,
+              animationDuration: `${0.5 + Math.random() * 0.5}s`
+            }}
+          />
+        ))}
+      </div>
+    );
+  };
+
+  // Add voice button to action buttons
+  const voiceAction: ActionButton = {
+    id: 'voice',
+    icon: isListening ? '🎙️' : '🎤',
+    status: isListening ? 'happy' : 'neutral',
+    label: isListening ? 'Stop & Send' : 'Talk'
+  };
+
+  // Update actionStates to include voice button
   const [actionStates, setActionStates] = useState<ActionButton[]>([
     { id: 'water', icon: '🍪', status: 'sad', label: 'Food' },
+    voiceAction,
     { id: 'more', icon: '🐾', status: 'neutral', label: 'More' }
   ]);
-
-  const handleActionClick = (actionId: string) => {
-    // Don't deduct coins for "More" action - always open pet shop
-    if (actionId === 'more') {
-      // Stop any current audio when opening pet shop
-      ttsService.stop();
-      setShowPetShop(true);
-      return;
-    }
-
-    // Check if player has enough coins for feeding actions
-    if (!hasEnoughCoins(10)) {
-      alert("Not enough coins! You need 10 coins to perform this action.");
-      return;
-    }
-
-    // Play feeding sound
-    playFeedingSound();
-
-    // Deduct coins and increase care level
-    spendCoins(10);
-    setCareLevel(Math.min(careLevel + 1, 6), currentStreak); // Max 6 actions, pass current streak
-    
-    // Track coins spent on current pet
-    addPetCoinsSpent(currentPet, 10);
-    
-    // Update streak based on calendar days
-    const newStreak = updateStreak();
-
-    // Trigger heart animation
-    setShowHeartAnimation(true);
-    setTimeout(() => setShowHeartAnimation(false), 1000);
-
-    // Update action status to happy
-    setActionStates(prev => prev.map(action => 
-      action.id === actionId 
-        ? { ...action, status: 'happy' }
-        : action
-    ));
-  };
 
   const getStatusEmoji = (status: ActionStatus) => {
     switch (status) {
@@ -309,6 +414,11 @@ export function PetPage({}: Props): JSX.Element {
     // Calculate coins spent on feeding for current evolution stage (for dog)
     const coinsSpentOnFeeding = getCoinsSpentForCurrentStage(currentStreak);
     
+    // For the dog, first check if we should use local assets for blinking
+    if (currentPet === 'dog' && coinsSpentOnFeeding < 10) {
+      return isBlinking ? pupClose : pupOpen;
+    }
+
     // Check streak level for different dog evolution tiers
     let currentImage;
     
@@ -418,7 +528,13 @@ export function PetPage({}: Props): JSX.Element {
     }
   };
 
+  // Get pet thought based on AI response or default thoughts
   const getPetThought = () => {
+    // If we have an AI response, use that instead of the default thoughts
+    if (aiResponse) {
+      return aiResponse;
+    }
+
     // Helper function to randomly select from an array of thoughts
     const getRandomThought = (thoughts: string[]) => {
       return thoughts[Math.floor(Math.random() * thoughts.length)];
@@ -584,7 +700,7 @@ export function PetPage({}: Props): JSX.Element {
   // Memoize the pet thought so it only changes when the actual state changes
   const currentPetThought = useMemo(() => {
     return getPetThought();
-  }, [currentPet, getCoinsSpentForCurrentStage(currentStreak), getPetCoinsSpent(currentPet)]);
+  }, [currentPet, getCoinsSpentForCurrentStage(currentStreak), getPetCoinsSpent(currentPet), aiResponse]);
 
   // Handle audio playback when message changes
   useEffect(() => {
@@ -603,6 +719,45 @@ export function PetPage({}: Props): JSX.Element {
       return () => clearTimeout(timer);
     }
   }, [currentPetThought, showPetShop, audioEnabled, lastSpokenMessage]);
+
+  // Stop voice interaction when switching pets or opening pet shop
+  useEffect(() => {
+    stopAll();
+  }, [currentPet, showPetShop, stopAll]);
+
+  // Update action states when voice state changes
+  useEffect(() => {
+    setActionStates(prev => prev.map(action => 
+      action.id === 'voice'
+        ? { 
+            ...action, 
+            icon: isListening ? '🎙️' : '🎤',
+            status: isListening ? 'happy' : 'neutral',
+            label: isListening ? 'Stop & Send' : 'Talk'
+          }
+        : action
+    ));
+  }, [isListening]);
+
+  useEffect(() => {
+    let blinkInterval: NodeJS.Timeout;
+    let blinkTimeout: NodeJS.Timeout;
+
+    if (currentPet === 'dog') {
+      // Set up periodic blinking
+      blinkInterval = setInterval(() => {
+        setIsBlinking(true);
+        blinkTimeout = setTimeout(() => {
+          setIsBlinking(false);
+        }, 400); // Blink duration: 200ms
+      }, 3000); // Blink every 4 seconds
+    }
+
+    return () => {
+      clearInterval(blinkInterval);
+      clearTimeout(blinkTimeout);
+    };
+  }, [currentPet]);
 
   return (
     <div className="min-h-screen flex flex-col" style={{
@@ -1061,6 +1216,23 @@ export function PetPage({}: Props): JSX.Element {
         </div>
       )}
 
+      {/* Transcribed Message Display - Bottom Right */}
+      {transcribedMessage && (
+        <div className="fixed bottom-24 right-6 z-30 max-w-xs animate-fade-in">
+          <div className="bg-gradient-to-br from-indigo-500/90 to-purple-600/90 backdrop-blur-sm rounded-2xl p-4 shadow-xl border border-white/20">
+            <div className="flex items-start gap-3">
+              <div className="text-xl text-white/90">💭</div>
+              <div className="flex-1">
+                <div className="text-xs font-medium text-white/70 mb-1">You said:</div>
+                <div className="text-sm text-white font-medium leading-relaxed">
+                  {transcribedMessage}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>
         {`
           @keyframes petGrow {
@@ -1164,6 +1336,21 @@ export function PetPage({}: Props): JSX.Element {
               transform: scale(1.2);
               opacity: 1;
             }
+          }
+
+          @keyframes fade-in {
+            from {
+              opacity: 0;
+              transform: translateY(10px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+          
+          .animate-fade-in {
+            animation: fade-in 0.3s ease-out forwards;
           }
         `}
       </style>
