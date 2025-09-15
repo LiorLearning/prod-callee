@@ -6,8 +6,11 @@ import { usePetData } from '@/lib/pet-data-service';
 import { usePetVoiceInteraction } from '@/hooks/use-pet-voice-interaction';
 import { useAuth } from '@/hooks/use-auth';
 import { useUnifiedAIStreaming } from '@/hooks/use-unified-ai-streaming';
-import pupClose from '@/assets/pup-close.png';
-import pupOpen from '@/assets/pup-open.png';
+import { Mic } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import pupOpen from '@/assets/faceSwap (1).gif';
+import littleKid from '@/assets/little-kid.png';
+import { EvolutionMenu } from '@/components/ui/evolution-menu';
 
 type Props = {};
 
@@ -15,7 +18,7 @@ type ActionStatus = 'happy' | 'sad' | 'neutral';
 
 interface ActionButton {
   id: string;
-  icon: string;
+  icon: string | React.ReactNode;
   status: ActionStatus;
   label: string;
 }
@@ -38,7 +41,7 @@ export function PetPage({}: Props): JSX.Element {
   const [lastSpokenMessage, setLastSpokenMessage] = useState('');
   const [transcribedMessage, setTranscribedMessage] = useState('');
   const [aiResponse, setAiResponse] = useState(''); // Add this line
-  const [isBlinking, setIsBlinking] = useState(false);
+  const [messageTimestamp, setMessageTimestamp] = useState<number | null>(null);
 
   // Streak system for dog evolution unlocks - based on consecutive calendar days (US timezone)
   const [currentStreak, setCurrentStreak] = useState(() => {
@@ -53,6 +56,9 @@ export function PetPage({}: Props): JSX.Element {
       return 0;
     }
   });
+
+  // Add state for evolution menu
+  const [showEvolutionMenu, setShowEvolutionMenu] = useState(false);
 
   // Get user ID for voice interaction
   const { user } = useAuth();
@@ -77,7 +83,10 @@ export function PetPage({}: Props): JSX.Element {
 
   // Add effect to update transcribed message when transcribedText changes
   useEffect(() => {
-    setTranscribedMessage(transcribedText);
+    if (transcribedText) {
+      setTranscribedMessage(transcribedText);
+      setMessageTimestamp(Date.now());
+    }
   }, [transcribedText]);
 
   // Get the unified AI streaming service
@@ -121,6 +130,18 @@ export function PetPage({}: Props): JSX.Element {
         setAiResponse(''); // Clear previous AI response
         startListening();
       }
+
+      // Update the voice action button with new icon and status
+      setActionStates(prev => prev.map(action => 
+        action.id === 'voice' 
+          ? { 
+              ...action, 
+              icon: <Mic className={cn("text-white", !isListening && "animate-pulse")} style={{ height: '2rem', width: '2rem' }} />,
+              status: !isListening ? 'happy' : 'neutral',
+              label: !isListening ? 'Stop & Send' : 'Talk'
+            }
+          : action
+      ));
       return;
     }
 
@@ -290,7 +311,7 @@ export function PetPage({}: Props): JSX.Element {
   // Add voice button to action buttons
   const voiceAction: ActionButton = {
     id: 'voice',
-    icon: isListening ? '🎙️' : '🎤',
+    icon: <Mic className={cn("text-white", isListening && "animate-pulse")} style={{ height: '2rem', width: '2rem' }} />,
     status: isListening ? 'happy' : 'neutral',
     label: isListening ? 'Stop & Send' : 'Talk'
   };
@@ -397,6 +418,7 @@ export function PetPage({}: Props): JSX.Element {
   };
 
   const getPetImage = () => {
+  return pupOpen;
     // Check if Bobo is owned and being displayed
     if (currentPet === 'bobo' && isPetOwned('bobo')) {
       // For Bobo, use pet-specific coin tracking
@@ -413,11 +435,7 @@ export function PetPage({}: Props): JSX.Element {
     
     // Calculate coins spent on feeding for current evolution stage (for dog)
     const coinsSpentOnFeeding = getCoinsSpentForCurrentStage(currentStreak);
-    
-    // For the dog, first check if we should use local assets for blinking
-    if (currentPet === 'dog' && coinsSpentOnFeeding < 10) {
-      return isBlinking ? pupClose : pupOpen;
-    }
+
 
     // Check streak level for different dog evolution tiers
     let currentImage;
@@ -731,7 +749,7 @@ export function PetPage({}: Props): JSX.Element {
       action.id === 'voice'
         ? { 
             ...action, 
-            icon: isListening ? '🎙️' : '🎤',
+            icon: <Mic className={cn("text-white", isListening && "animate-pulse")} style={{ height: '2rem', width: '2rem' }} />,
             status: isListening ? 'happy' : 'neutral',
             label: isListening ? 'Stop & Send' : 'Talk'
           }
@@ -739,41 +757,34 @@ export function PetPage({}: Props): JSX.Element {
     ));
   }, [isListening]);
 
-  useEffect(() => {
-    let blinkInterval: NodeJS.Timeout;
-    let blinkTimeout: NodeJS.Timeout;
-
-    if (currentPet === 'dog') {
-      // Set up periodic blinking
-      blinkInterval = setInterval(() => {
-        setIsBlinking(true);
-        blinkTimeout = setTimeout(() => {
-          setIsBlinking(false);
-        }, 400); // Blink duration: 200ms
-      }, 3000); // Blink every 4 seconds
-    }
-
-    return () => {
-      clearInterval(blinkInterval);
-      clearTimeout(blinkTimeout);
-    };
-  }, [currentPet]);
 
   return (
-    <div className="min-h-screen flex flex-col" style={{
-      backgroundImage: `url('https://tutor.mathkraft.org/_next/image?url=%2Fapi%2Fproxy%3Furl%3Dhttps%253A%252F%252Fdubeus2fv4wzz.cloudfront.net%252Fimages%252F20250903_181706_image.png&w=3840&q=75&dpl=dpl_2uGXzhZZsLneniBZtsxr7PEabQXN')`,
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-      backgroundRepeat: 'no-repeat',
+    <div className="min-h-screen flex flex-col relative overflow-hidden" style={{
+      background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #ec4899 100%)',
       fontFamily: 'Quicksand, system-ui, sans-serif'
     }}>
+      {/* Magical floating particles */}
+      <div className="magical-particles">
+        {[...Array(20)].map((_, i) => (
+          <div
+            key={i}
+            className="particle"
+            style={{
+              '--delay': `${Math.random() * 10}s`,
+              '--size': `${Math.random() * 20 + 10}px`,
+              '--left': `${Math.random() * 100}%`,
+            } as React.CSSProperties}
+          />
+        ))}
+      </div>
+
       {/* Glass overlay for better contrast */}
       <div className="absolute inset-0 bg-black/10 backdrop-blur-[1px]"></div>
 
       {/* Top UI - Coins and Streak */}
       <div className="absolute top-5 left-1/2 transform -translate-x-1/2 z-20 flex gap-4">
         {/* Coins */}
-        <div className="bg-white/20 backdrop-blur-md rounded-xl px-4 py-3 border border-white/30 shadow-lg">
+        <div className="bg-white/20 backdrop-blur-md rounded-full px-6 py-3 border-2 border-white/30 shadow-lg hover:scale-105 transition-transform">
           <div className="flex items-center gap-2 text-white font-bold text-lg drop-shadow-md">
             <span className="text-xl">🪙</span>
             <span>{coins}</span>
@@ -781,7 +792,7 @@ export function PetPage({}: Props): JSX.Element {
         </div>
         
         {/* Streak */}
-        <div className="bg-white/20 backdrop-blur-md rounded-xl px-4 py-3 border border-white/30 shadow-lg">
+        <div className="bg-white/20 backdrop-blur-md rounded-full px-6 py-3 border-2 border-white/30 shadow-lg hover:scale-105 transition-transform">
           <div className="flex items-center gap-2 text-white font-bold text-lg drop-shadow-md">
             <span className="text-xl">🔥</span>
             <span>{currentStreak}</span>
@@ -793,7 +804,7 @@ export function PetPage({}: Props): JSX.Element {
       <div className="absolute bottom-5 left-5 z-20 flex flex-col gap-2">
         <button
           onClick={() => setCoins(100)}
-          className="bg-transparent hover:bg-white/5 px-2 py-1 rounded text-transparent hover:text-white/20 text-xs transition-all duration-300 opacity-5 hover:opacity-30"
+          className="w-12 h-12 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-lg border-2 border-white/30 backdrop-blur-md shadow-lg transition-all duration-300 opacity-5 hover:opacity-30"
           title="Testing: Refill coins to 100"
         >
           🔄
@@ -813,7 +824,7 @@ export function PetPage({}: Props): JSX.Element {
             };
             saveStreakData(newStreakData);
           }}
-          className="bg-transparent hover:bg-white/5 px-2 py-1 rounded text-transparent hover:text-white/20 text-xs transition-all duration-300 opacity-5 hover:opacity-30"
+          className="w-12 h-12 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-lg border-2 border-white/30 backdrop-blur-md shadow-lg transition-all duration-300 opacity-5 hover:opacity-30"
           title="Testing: Increase streak by 1"
         >
           🔥
@@ -898,143 +909,161 @@ export function PetPage({}: Props): JSX.Element {
         )}
       </div>
 
-      {/* Main pet area - moved down slightly */}
-      <div className="flex-1 flex flex-col items-center justify-center relative pb-20 px-4 z-10 mt-16">
-        {/* Pet Thought Bubble - Only show when pet shop is closed, moved down */}
-        {!showPetShop && (
-          <div className="relative bg-gradient-to-br from-blue-50 to-cyan-50 rounded-3xl p-5 mb-8 border-3 border-blue-400 shadow-xl max-w-md w-full mx-4 backdrop-blur-sm bg-white/90">
-            {/* Speech bubble tail */}
-            <div className="absolute -bottom-3 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[12px] border-r-[12px] border-t-[12px] border-l-transparent border-r-transparent border-t-blue-400"></div>
+      {/* Main pet area - moved to top left */}
+      <div className="flex-1 flex flex-col items-start justify-start relative px-4 z-10 mt-24">
+        <div className="flex items-start gap-8 w-full">
+          {/* Pet Container - Left Side */}
+          <div className="relative w-72">
+            {/* Pet Image with bouncing animation */}
+            <div className="relative drop-shadow-2xl animate-gentle-bounce">
+              <img 
+                src={getPetImage()}
+                alt="Pet"
+                className="w-72 h-72 object-contain rounded-2xl transition-all duration-700 ease-out hover:scale-105"
+                style={{
+                  animation: careLevel * 10 >= 30 && careLevel * 10 < 50 ? 'petGrow 800ms ease-out' : 
+                            careLevel * 10 >= 50 ? 'petEvolve 800ms ease-out' : 'none'
+                }}
+              />
+            </div>
             
-            {/* Thought bubble dots */}
-            <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 flex gap-1">
-              <div className="w-2 h-2 rounded-full bg-blue-400 animate-bounce" style={{animationDelay: '0s'}}></div>
-              <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{animationDelay: '0.3s'}}></div>
-              <div className="w-1 h-1 rounded-full bg-blue-400 animate-bounce" style={{animationDelay: '0.6s'}}></div>
-            </div>
-
-            <div className="text-sm text-slate-800 font-medium leading-relaxed text-center">
-              {currentPetThought}
-            </div>
+            {/* Food bowl moved under pet with sparkle effect */}
+            {/* <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-5xl drop-shadow-lg animate-sparkle">
+              🥣
+              <div className="absolute -top-2 -right-2 text-2xl animate-spin-slow">✨</div>
+            </div> */}
           </div>
-        )}
 
-        {/* Pet (Custom Image) */}
-        <div className="relative drop-shadow-2xl">
-          <img 
-            src={getPetImage()}
-            alt="Pet"
-            className="w-80 h-80 object-contain rounded-2xl transition-all duration-700 ease-out hover:scale-105"
-            style={{
-              animation: careLevel * 10 >= 30 && careLevel * 10 < 50 ? 'petGrow 800ms ease-out' : 
-                        careLevel * 10 >= 50 ? 'petEvolve 800ms ease-out' : 'none'
-            }}
-          />
-        </div>
-        
-        {/* Food bowl */}
-        <div className="absolute bottom-8 left-1/2 transform -translate-x-20 text-5xl drop-shadow-lg">
-          🥣
-        </div>
-      </div>
+          {/* Chat Area - Right Side */}
+          <div className="flex-1 max-w-2xl">
+            {/* Pet's Chat Bubble */}
+            {!showPetShop && (
+              <div className="relative bg-gradient-to-br from-blue-50 to-cyan-50 rounded-3xl p-6 mb-8 border-3 border-blue-400 shadow-xl w-full backdrop-blur-sm bg-white/90 hover:scale-102 transition-transform">
+                {/* Speech bubble tail pointing to pet */}
+                <div className="absolute top-1/2 -left-3 transform -translate-y-1/2 w-0 h-0 border-t-[12px] border-b-[12px] border-r-[12px] border-t-transparent border-b-transparent border-r-blue-400"></div>
+                
+                {/* Pet name badge */}
+                <div className="absolute -top-3 left-4 bg-gradient-to-r from-pink-400 to-purple-500 text-white px-4 py-1 rounded-full text-sm font-bold shadow-lg">
+                  {currentPet === 'dog' ? 'April 🐶' : currentPet === 'bobo' ? 'Bobo 🐵' : 'Feather 🦜'}
+                </div>
 
-      {/* Dog Evolution Display - Right Side */}
-      <div className="absolute right-6 top-1/2 transform -translate-y-1/2 z-10 flex flex-col gap-4">
-        {/* Small Pup - Always available */}
-        <div className="flex flex-col items-center">
-          <div className="relative p-3 rounded-2xl border-2 transition-all duration-300 bg-gradient-to-br from-blue-100 to-cyan-100 border-blue-400 shadow-lg">
-            <div className="text-5xl transition-all duration-300 grayscale-0">
-              🐶
-            </div>
-            <div className="absolute -top-2 -right-2 bg-green-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">
-              ✓
-            </div>
-          </div>
-          <div className="text-xs font-semibold text-center mt-2 text-white drop-shadow-md">
-            1 Day 🔥
-          </div>
-        </div>
+                <div className="text-lg text-slate-800 font-medium leading-relaxed mt-2">
+                  {currentPetThought}
+                </div>
 
-        {/* Medium Dog - Unlocks at 2 consecutive days */}
-        <div className="flex flex-col items-center">
-          <div className={`relative p-4 rounded-2xl border-2 transition-all duration-300 ${
-            currentStreak >= 2 
-              ? 'bg-gradient-to-br from-yellow-100 to-orange-100 border-yellow-400 shadow-lg' 
-              : 'bg-gray-100 border-gray-300 opacity-60'
-          }`}>
-            <div className={`text-6xl transition-all duration-300 ${
-              currentStreak >= 2 ? 'grayscale-0' : 'grayscale'
-            }`}>
-              🐕
-            </div>
-            {currentStreak >= 2 && (
-              <div className="absolute -top-2 -right-2 bg-green-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">
-                ✓
+                {/* Animated dots under chat */}
+                <div className="absolute -bottom-6 left-4 flex gap-1">
+                  <div className="w-2 h-2 rounded-full bg-blue-400 animate-bounce" style={{animationDelay: '0s'}}></div>
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{animationDelay: '0.3s'}}></div>
+                  <div className="w-1 h-1 rounded-full bg-blue-400 animate-bounce" style={{animationDelay: '0.6s'}}></div>
+                </div>
               </div>
             )}
           </div>
-          <div className="text-xs font-semibold text-center mt-2 text-white drop-shadow-md">
-            {currentStreak >= 2 ? 'Medium Dog' : '2 Days 🔥'}
-          </div>
         </div>
 
-        {/* Large Dog - Unlocks at 3 consecutive days */}
-        <div className="flex flex-col items-center">
-          <div className={`relative p-4 rounded-2xl border-2 transition-all duration-300 ${
-            currentStreak >= 3 
-              ? 'bg-gradient-to-br from-purple-100 to-pink-100 border-purple-400 shadow-lg' 
-              : 'bg-gray-100 border-gray-300 opacity-60'
-          }`}>
-            <div className={`text-7xl transition-all duration-300 ${
-              currentStreak >= 3 ? 'grayscale-0' : 'grayscale'
-            }`}>
-              🐺
-            </div>
-            {currentStreak >= 3 && (
-              <div className="absolute -top-2 -right-2 bg-green-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">
-                ✓
+        {/* User Chat Area - Bottom Right */}
+        <div className="fixed bottom-24 right-8 flex flex-row-reverse items-end gap-4 z-30">
+          {/* User Avatar */}
+          <div className="relative">
+            <div className="relative w-72">
+              {/* Kid Image with bouncing animation */}
+              <div className="relative drop-shadow-2xl animate-gentle-bounce">
+                <img 
+                  src={littleKid}
+                  alt="Kid"
+                  className="w-72 h-72 object-contain rounded-2xl transition-all duration-700 ease-out hover:scale-105"
+                />
               </div>
-            )}
+            </div>
           </div>
-          <div className="text-xs font-semibold text-center mt-2 text-white drop-shadow-md">
-            {currentStreak >= 3 ? 'Large Dog' : '3 Days 🔥'}
-          </div>
-        </div>
 
+          {/* User's transcribed message */}
+          {transcribedMessage && (
+            <div className="max-w-md animate-fade-in">
+              <div className="relative bg-gradient-to-br from-purple-500/90 to-indigo-600/90 backdrop-blur-sm rounded-2xl p-4 shadow-xl border border-white/20">
+                {/* Speech bubble tail pointing to kid */}
+                <div className="absolute top-1/2 -right-3 transform -translate-y-1/2 w-0 h-0 border-t-[12px] border-b-[12px] border-l-[12px] border-t-transparent border-b-transparent border-l-purple-500/90"></div>
+                <div className="text-sm text-white font-medium leading-relaxed">
+                  {transcribedMessage}
+                </div>
+                {messageTimestamp && (
+                  <div className="text-xs text-white/50 mt-1">
+                    {new Date(messageTimestamp).toLocaleTimeString()}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Bottom Action Buttons */}
-      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-30">
-        <div className="flex gap-4 px-4 py-2 bg-white/20 backdrop-blur-md rounded-2xl border border-white/30 shadow-xl">
+      {/* Evolution Menu Button */}
+      <button
+        onClick={() => setShowEvolutionMenu(true)}
+        className="fixed top-24 right-8 w-16 h-16 rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 backdrop-blur-md border-2 border-white/30 text-2xl flex items-center justify-center shadow-xl z-40 transition-all duration-300 hover:scale-110 active:scale-95"
+      >
+        🐾
+      </button>
+
+      {/* Evolution Menu */}
+      <EvolutionMenu
+        currentStreak={currentStreak}
+        isOpen={showEvolutionMenu}
+        onClose={() => setShowEvolutionMenu(false)}
+      />
+
+      {/* Bottom Action Buttons - Centered with playful style */}
+      <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-30">
+        <div className="flex gap-6 px-8 py-6 bg-white/10 backdrop-blur-md rounded-full border-2 border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.2)] hover:shadow-[0_16px_48px_rgba(0,0,0,0.3)] transition-all duration-300">
         {actionStates.map((action) => (
           <button
             key={action.id}
             onClick={() => handleActionClick(action.id)}
-            className="flex flex-col items-center gap-1 p-3 bg-transparent border-none cursor-pointer rounded-xl min-w-16 transition-all duration-200 hover:bg-white/20 hover:-translate-y-1 active:scale-95"
+            className={`
+              relative flex flex-col items-center gap-2 p-4
+              bg-gradient-to-br from-white/10 to-white/5
+              rounded-full min-w-[100px] min-h-[80px]
+              transition-all duration-300 
+              hover:bg-white/20 hover:-translate-y-1 hover:scale-110
+              active:scale-95 active:translate-y-0
+              border-2 border-white/30
+              group
+            `}
           >
-            {/* Status emoji */}
+            {/* Status emoji with improved animation */}
             {getStatusEmoji(action.status) && (
-              <div className="absolute -top-2 -right-2 text-lg bg-white rounded-full w-8 h-8 flex items-center justify-center shadow-md">
+              <div className="absolute -top-2 -right-2 text-lg bg-gradient-to-br from-white to-white/90 rounded-full w-8 h-8 flex items-center justify-center shadow-lg animate-bounce">
                 {getStatusEmoji(action.status)}
               </div>
             )}
             
-            {/* Action icon */}
-            <div className="text-4xl drop-shadow-lg">
-              {action.icon}
+            {/* Action icon with hover effect */}
+            <div className="text-4xl drop-shadow-lg transform transition-transform duration-300 group-hover:scale-110 group-hover:rotate-[8deg]">
+              {typeof action.icon === 'string' ? (
+                <span className="text-4xl">{action.icon}</span>
+              ) : (
+                <div className="scale-150">{action.icon}</div>
+              )}
             </div>
             
-            {/* Action label - small text below */}
-            <div className="text-xs font-semibold text-white drop-shadow-md">
+            {/* Action label with improved text style */}
+            <div className="text-sm font-bold text-white drop-shadow-md tracking-wide absolute -bottom-6 whitespace-nowrap min-w-[80px] text-center">
               {action.label}
             </div>
             
-            {/* Coin cost for Food action */}
+            {/* Coin cost with enhanced styling */}
             {action.id === 'water' && (
-              <div className="text-xs font-semibold text-yellow-300 drop-shadow-md">
-                🪙 10
+              <div className="absolute -top-3 -left-3 flex items-center justify-center bg-gradient-to-br from-yellow-500/40 to-amber-600/40 backdrop-blur-md px-3 py-1.5 rounded-full border-2 border-yellow-400/30 shadow-lg">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-white font-bold text-sm">10</span>
+                  <span className="text-base">🪙</span>
+                </div>
               </div>
             )}
+
+            {/* Subtle glow effect on hover */}
+            <div className="absolute inset-0 rounded-full bg-white/0 transition-all duration-300 group-hover:bg-white/10 group-hover:shadow-[0_0_20px_rgba(255,255,255,0.3)] pointer-events-none"></div>
           </button>
         ))}
         </div>
@@ -1048,10 +1077,10 @@ export function PetPage({}: Props): JSX.Element {
             ttsService.stop();
           }
         }}
-        className={`fixed bottom-6 right-6 w-14 h-14 rounded-full border-2 border-white/30 text-2xl flex items-center justify-center shadow-xl z-40 transition-all duration-200 hover:scale-110 active:scale-95 ${
+        className={`fixed bottom-8 right-8 w-16 h-16 rounded-full border-2 border-white/30 text-2xl flex items-center justify-center shadow-xl z-40 transition-all duration-300 hover:scale-110 active:scale-95 backdrop-blur-md ${
           audioEnabled 
-            ? 'bg-gradient-to-br from-emerald-500 to-green-600 text-white' 
-            : 'bg-gradient-to-br from-red-500 to-red-600 text-white'
+            ? 'bg-gradient-to-br from-emerald-500/80 to-green-600/80' 
+            : 'bg-gradient-to-br from-red-500/80 to-red-600/80'
         }`}
       >
         {audioEnabled ? '🔊' : '🔇'}
@@ -1059,9 +1088,9 @@ export function PetPage({}: Props): JSX.Element {
 
       {/* Pet Switcher - Only show if user owns multiple pets */}
       {ownedPets.length > 1 && (
-        <div className="fixed top-24 left-6 z-20 flex flex-col gap-2">
-          <div className="text-xs font-semibold text-white drop-shadow-md mb-1">
-            Your Pets:
+        <div className="fixed top-24 left-8 z-20 flex flex-col gap-3">
+          <div className="text-xs font-semibold text-white/80 drop-shadow-md mb-1 backdrop-blur-sm px-3 py-1 rounded-full bg-white/10 border border-white/20">
+            Your Pets
           </div>
           {ownedPets.map((petId) => {
             const petEmoji = petId === 'dog' ? '🐶' : petId === 'bobo' ? '🐵' : petId === 'feather' ? '🦜' : '🐾';
@@ -1071,10 +1100,10 @@ export function PetPage({}: Props): JSX.Element {
               <button
                 key={petId}
                 onClick={() => setCurrentPet(petId)}
-                className={`w-12 h-12 rounded-xl border-2 text-2xl flex items-center justify-center shadow-lg transition-all duration-200 hover:scale-110 ${
+                className={`w-16 h-16 rounded-full border-2 text-2xl flex items-center justify-center shadow-lg transition-all duration-300 hover:scale-110 backdrop-blur-md ${
                   isActive 
-                    ? 'bg-gradient-to-br from-blue-500 to-purple-600 border-white text-white' 
-                    : 'bg-white/20 backdrop-blur-md border-white/30 text-white hover:bg-white/30'
+                    ? 'bg-gradient-to-br from-blue-500/80 to-purple-600/80 border-white' 
+                    : 'bg-white/20 border-white/30 hover:bg-white/30'
                 }`}
                 title={`Switch to ${petId === 'dog' ? 'Dog' : petId === 'bobo' ? 'Bobo' : petId === 'feather' ? 'Feather' : petId}`}
               >
@@ -1216,23 +1245,6 @@ export function PetPage({}: Props): JSX.Element {
         </div>
       )}
 
-      {/* Transcribed Message Display - Bottom Right */}
-      {transcribedMessage && (
-        <div className="fixed bottom-24 right-6 z-30 max-w-xs animate-fade-in">
-          <div className="bg-gradient-to-br from-indigo-500/90 to-purple-600/90 backdrop-blur-sm rounded-2xl p-4 shadow-xl border border-white/20">
-            <div className="flex items-start gap-3">
-              <div className="text-xl text-white/90">💭</div>
-              <div className="flex-1">
-                <div className="text-xs font-medium text-white/70 mb-1">You said:</div>
-                <div className="text-sm text-white font-medium leading-relaxed">
-                  {transcribedMessage}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       <style>
         {`
           @keyframes petGrow {
@@ -1351,6 +1363,106 @@ export function PetPage({}: Props): JSX.Element {
           
           .animate-fade-in {
             animation: fade-in 0.3s ease-out forwards;
+          }
+
+          @keyframes gentle-bounce {
+            0%, 100% {
+              transform: translateY(0);
+            }
+            50% {
+              transform: translateY(-10px);
+            }
+          }
+
+          @keyframes sparkle {
+            0%, 100% {
+              transform: scale(1);
+              opacity: 1;
+            }
+            50% {
+              transform: scale(1.1);
+              opacity: 0.8;
+            }
+          }
+
+          @keyframes spin-slow {
+            from {
+              transform: rotate(0deg);
+            }
+            to {
+              transform: rotate(360deg);
+            }
+          }
+
+          .animate-gentle-bounce {
+            animation: gentle-bounce 3s ease-in-out infinite;
+          }
+
+          .animate-sparkle {
+            animation: sparkle 2s ease-in-out infinite;
+          }
+
+          .animate-spin-slow {
+            animation: spin-slow 4s linear infinite;
+          }
+
+          .hover\\:scale-102:hover {
+            transform: scale(1.02);
+          }
+
+          @keyframes float {
+            0%, 100% {
+              transform: translateY(0) rotate(0deg);
+              opacity: 0;
+            }
+            25% {
+              opacity: 1;
+            }
+            75% {
+              opacity: 0.5;
+            }
+            50% {
+              transform: translateY(-400px) rotate(360deg);
+              opacity: 0;
+            }
+          }
+
+          .magical-particles {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: 0;
+          }
+
+          .particle {
+            position: absolute;
+            bottom: -20px;
+            left: var(--left);
+            width: var(--size);
+            height: var(--size);
+            background: radial-gradient(circle at center, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0) 70%);
+            border-radius: 50%;
+            animation: float 10s linear infinite;
+            animation-delay: var(--delay);
+          }
+
+          /* Add shimmer effect to the background */
+          @keyframes shimmer {
+            0% {
+              background-position: 0% 50%;
+            }
+            50% {
+              background-position: 100% 50%;
+            }
+            100% {
+              background-position: 0% 50%;
+            }
+          }
+
+          .min-h-screen {
+            animation: shimmer 15s ease infinite;
+            background-size: 200% 200%;
           }
         `}
       </style>
