@@ -3,16 +3,17 @@ import { useCoins } from '@/pages/coinSystem';
 import { ttsService } from '@/lib/tts-service';
 import { useTTSSpeaking } from '@/hooks/use-tts-speaking';
 import { usePetData } from '@/lib/pet-data-service';
-import { usePetVoiceInteraction } from '@/hooks/use-pet-voice-interaction';
 import { useAuth } from '@/hooks/use-auth';
-import { useUnifiedAIStreaming } from '@/hooks/use-unified-ai-streaming';
 import { Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import pupOpen from '@/assets/faceSwap (1).gif';
 import littleKid from '@/assets/little-kid.png';
 import { EvolutionMenu } from '@/components/ui/evolution-menu';
+import { petAIService } from '@/lib/pet-ai-service';
 
 type Props = {};
+
+type SpeechRecognitionType = any;
 
 type ActionStatus = 'happy' | 'sad' | 'neutral';
 
@@ -35,13 +36,11 @@ export function PetPage({}: Props): JSX.Element {
   
   // Local state for UI interactions
   const [showHeartAnimation, setShowHeartAnimation] = useState(false);
-  const [previousCoins, setPreviousCoins] = useState(coins);
   const [previousCoinsSpentForStage, setPreviousCoinsSpentForStage] = useState(0);
   const [showPetShop, setShowPetShop] = useState(false);
   const [lastSpokenMessage, setLastSpokenMessage] = useState('');
   const [transcribedMessage, setTranscribedMessage] = useState('');
   const [aiResponse, setAiResponse] = useState(''); // Add this line
-  const [messageTimestamp, setMessageTimestamp] = useState<number | null>(null);
 
   // Streak system for dog evolution unlocks - based on consecutive calendar days (US timezone)
   const [currentStreak, setCurrentStreak] = useState(() => {
@@ -60,75 +59,110 @@ export function PetPage({}: Props): JSX.Element {
   // Add state for evolution menu
   const [showEvolutionMenu, setShowEvolutionMenu] = useState(false);
 
+  // Add new state for eating animation
+  const [isEating, setIsEating] = useState(false);
+  const [showCookieParticles, setShowCookieParticles] = useState(false);
+
+  // Add these state declarations after other useState declarations
+  const [userGuess, setUserGuess] = useState<string[]>([]);
+  const [isGuessCorrect, setIsGuessCorrect] = useState(false);
+  const [activeBoxIndex, setActiveBoxIndex] = useState<number>(-1);
+
   // Get user ID for voice interaction
   const { user } = useAuth();
 
   // Voice interaction state
-  const {
-    isListening,
-    isProcessing,
-    isSpeaking: isVoiceSpeaking,
-    startListening,
-    cancelListening,
-    processVoiceInput,
-    stopAll,
-    transcribedText
-  } = usePetVoiceInteraction({
-    userId: user?.uid || 'anonymous',
-    voiceId: 'cgSgspJ2msm6clMCkdW9', // Jessica voice for now
-    stability: 0.7,
-    similarityBoost: 0.8,
-    speed: 0.9
-  });
+  const [isListening, setIsListening] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [transcribedText, setTranscribedText] = useState('');
 
-  // Add effect to update transcribed message when transcribedText changes
+  // Voice recognition setup
+  const [recognition, setRecognition] = useState<SpeechRecognitionType | null>(null);
+
+  // Initialize speech recognition
   useEffect(() => {
-    if (transcribedText) {
-      setTranscribedMessage(transcribedText);
-      setMessageTimestamp(Date.now());
-    }
-  }, [transcribedText]);
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
 
-  // Get the unified AI streaming service
-  const { sendMessage } = useUnifiedAIStreaming({
-    userId: user?.uid || 'anonymous',
-    onResponseComplete: (response) => {
-      if (response?.textContent) {
-        setAiResponse(response.textContent);
+        recognition.onresult = (event: any) => {
+          const transcript = event.results[0][0].transcript;
+          setTranscribedText(transcript);
+          setTranscribedMessage(transcript);
+          setIsListening(false);
+          handleVoiceInput(transcript);
+        };
+
+        recognition.onerror = (event: any) => {
+          console.error('Speech recognition error:', event.error);
+          setIsListening(false);
+          setIsProcessing(false);
+        };
+
+        recognition.onend = () => {
+          setIsListening(false);
+        };
+
+        setRecognition(recognition);
       }
     }
-  });
+  }, []);
+
+  // Handle voice input processing
+  const handleVoiceInput = async (transcript: string) => {
+    setIsProcessing(true);
+    try {
+      // Get the response from our pet AI service
+      const response = await petAIService.generateResponse(currentPet, transcript);
+      
+      // Update the AI response first
+      setAiResponse(response);
+      
+      // Add a small delay before speaking to ensure the UI has updated
+      if (audioEnabled) {
+        setTimeout(async () => {
+          console.log('Speaking response:', response);
+          await speakText(response);
+        }, 500); // 500ms delay to ensure smooth transition
+      }
+    } catch (error) {
+      console.error('Failed to get AI response:', error);
+      setAiResponse("I'm having trouble understanding right now. Could you try again?");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   // Update the voice action handler
-  const handleActionClick = (actionId: string) => {
+  const handleActionClick = async (actionId: string) => {
     if (actionId === 'voice') {
       if (isListening) {
-        // When stopping, first cancel listening then process the voice input
-        cancelListening();
-        processVoiceInput().then(async () => {
-          if (transcribedText) {
-            // Create a pet-specific prompt
-            const petPrompt = `I am ${currentPet === 'dog' ? 'April the dog' : currentPet === 'bobo' ? 'Bobo the monkey' : 'Feather the bird'}. I am your virtual pet friend. You just said: "${transcribedText}". I should respond in a friendly, playful way that matches my personality. If you ask about my feelings, I should reference my current state (based on coins spent: ${getCurrentPetCoinsSpent()}/50 coins spent on feeding).`;
-            
-            try {
-              const response = await sendMessage(
-                petPrompt,
-                [], // Empty chat history for now
-                {} as any // No spelling question for pet interactions
-              );
-              
-              if (response?.textContent) {
-                setAiResponse(response.textContent);
-              }
-            } catch (error) {
-              console.error('Failed to get AI response:', error);
-            }
-          }
-        });
+        // When stopping, stop the recognition
+        if (recognition) {
+          recognition.stop();
+        }
+        setIsListening(false);
       } else {
         setTranscribedMessage(''); // Clear previous message
-        setAiResponse(''); // Clear previous AI response
-        startListening();
+        setTranscribedText(''); // Also clear transcribed text
+        setIsListening(true);
+        
+        // Start speech recognition if available
+        if (recognition) {
+          try {
+            await recognition.start();
+          } catch (error) {
+            console.error('Failed to start speech recognition:', error);
+            setIsListening(false);
+          }
+        } else {
+          console.error('Speech recognition not supported');
+          setIsListening(false);
+        }
       }
 
       // Update the voice action button with new icon and status
@@ -136,9 +170,9 @@ export function PetPage({}: Props): JSX.Element {
         action.id === 'voice' 
           ? { 
               ...action, 
-              icon: <Mic className={cn("text-white", !isListening && "animate-pulse")} style={{ height: '2rem', width: '2rem' }} />,
-              status: !isListening ? 'happy' : 'neutral',
-              label: !isListening ? 'Stop & Send' : 'Talk'
+              icon: <Mic className={cn("text-white", isListening && "animate-pulse")} style={{ height: '2rem', width: '2rem' }} />,
+              status: isListening ? 'happy' : 'neutral',
+              label: isListening ? 'Stop & Send' : 'Talk'
             }
           : action
       ));
@@ -153,35 +187,48 @@ export function PetPage({}: Props): JSX.Element {
       return;
     }
 
-    // Check if player has enough coins for feeding actions
-    if (!hasEnoughCoins(10)) {
-      alert("Not enough coins! You need 10 coins to perform this action.");
-      return;
+    // Handle feeding action (water/food)
+    if (actionId === 'water') {
+      // Check if player has enough coins for feeding actions
+      if (!hasEnoughCoins(10)) {
+        alert("Not enough coins! You need 10 coins to perform this action.");
+        return;
+      }
+
+      // Play feeding sound
+      playFeedingSound();
+
+      // Trigger eating animation
+      setIsEating(true);
+      setShowCookieParticles(true);
+      
+      // Reset animations after delay
+      setTimeout(() => {
+        setIsEating(false);
+        setShowCookieParticles(false);
+      }, 1000);
+
+      // Deduct coins and increase care level
+      spendCoins(10);
+      setCareLevel(Math.min(careLevel + 1, 6), currentStreak);
+      
+      // Track coins spent on current pet
+      addPetCoinsSpent(currentPet, 10);
+      
+      // Update streak based on calendar days
+      const newStreak = updateStreak();
+
+      // Trigger heart animation
+      setShowHeartAnimation(true);
+      setTimeout(() => setShowHeartAnimation(false), 1000);
+
+      // Update action status to happy
+      setActionStates(prev => prev.map(action => 
+        action.id === actionId 
+          ? { ...action, status: 'happy' }
+          : action
+      ));
     }
-
-    // Play feeding sound
-    playFeedingSound();
-
-    // Deduct coins and increase care level
-    spendCoins(10);
-    setCareLevel(Math.min(careLevel + 1, 6), currentStreak); // Max 6 actions, pass current streak
-    
-    // Track coins spent on current pet
-    addPetCoinsSpent(currentPet, 10);
-    
-    // Update streak based on calendar days
-    const newStreak = updateStreak();
-
-    // Trigger heart animation
-    setShowHeartAnimation(true);
-    setTimeout(() => setShowHeartAnimation(false), 1000);
-
-    // Update action status to happy
-    setActionStates(prev => prev.map(action => 
-      action.id === actionId 
-        ? { ...action, status: 'happy' }
-        : action
-    ));
   };
 
   // Get current date in US timezone (Eastern Time)
@@ -288,25 +335,6 @@ export function PetPage({}: Props): JSX.Element {
   // TTS message ID for tracking speaking state
   const petMessageId = 'pet-message';
   const isSpeaking = useTTSSpeaking(petMessageId);
-
-  // Waveform Visualizer Component
-  const WaveformVisualizer = () => {
-    return (
-      <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 rounded-xl border border-foreground/30 w-64 bg-white/90 backdrop-blur-sm text-sm h-9 focus:border-foreground/60 flex items-center justify-center gap-1 px-4 shadow-lg">
-        {[...Array(10)].map((_, i) => (
-          <div
-            key={i}
-            className="w-1 bg-primary rounded-full animate-pulse"
-            style={{
-              height: `${Math.random() * 16 + 6}px`,
-              animationDelay: `${i * 0.1}s`,
-              animationDuration: `${0.5 + Math.random() * 0.5}s`
-            }}
-          />
-        ))}
-      </div>
-    );
-  };
 
   // Add voice button to action buttons
   const voiceAction: ActionButton = {
@@ -553,154 +581,19 @@ export function PetPage({}: Props): JSX.Element {
       return aiResponse;
     }
 
-    // Helper function to randomly select from an array of thoughts
-    const getRandomThought = (thoughts: string[]) => {
-      return thoughts[Math.floor(Math.random() * thoughts.length)];
+    // Get initial greeting based on pet type
+    const getInitialGreeting = () => {
+      if (currentPet === 'bobo' && isPetOwned('bobo')) {
+        return "Oook ook! 🐵 I'm Bobo! I love making new friends! What would you like to talk about?";
+      } else if (currentPet === 'feather' && isPetOwned('feather')) {
+        return "Tweet tweet! 🦜 I'm Feather! I'm so excited to chat with you! What's on your mind?";
+      } else {
+        return "Hi there! 🐶 I'm April! I'm so happy to be your friend! What would you like to talk about?";
+      }
     };
-    
-    // Different thoughts for different pets
-    if (currentPet === 'bobo' && isPetOwned('bobo')) {
-      const boboCoinsSpent = getPetCoinsSpent('bobo');
-      
-      if (boboCoinsSpent === 0) {
-        const hungryThoughts = [
-          "Oook ook! 🐵 I'm Bobo! My banana belly is empty... can you feed me some cookies?",
-          "Hey there, Callee! 🍌 Bobo here! I'm swinging from hunger... got any treats?",
-          "Oook! It's me, your monkey friend Bobo! 🐵 My tummy is rumbling for some cookies!",
-          "Hi Callee! Bobo needs some yummy cookies! 🍪 My monkey appetite is huge!",
-          "Oook ook! 🐵 Bobo is starving! Can you help your monkey friend with some treats?",
-          "Callee! 🍌 Your monkey Bobo is so hungry... cookies would make me do happy flips!"
-        ];
-        return getRandomThought(hungryThoughts);
-      } else if (boboCoinsSpent < 30) {
-        const satisfiedThoughts = [
-          "Mmm banana-licious! 🍌 More cookies will make this monkey swing with joy!",
-          "Oook ook! Those cookies were amazing! 🐵 But Bobo could eat more!",
-          "Yum yum! 🍪 These treats are perfect for a growing monkey like me!",
-          "Oook! Those cookies hit the spot! 🐵 But my monkey appetite is still growing!",
-          "Thank you, Callee! 🥰 Those cookies were perfect, but Bobo is still a little peckish!",
-          "Delicious! 🍪 My tail is wagging so fast! More cookies would make me flip with happiness!"
-        ];
-        return getRandomThought(satisfiedThoughts);
-      } else if (boboCoinsSpent < 50) {
-        const growingThoughts = [
-          "Oook ook! I'm growing stronger! 🐵 Keep feeding me - I'm getting bigger and more agile!",
-          "Look at me swing! 💪 I can feel myself getting stronger with each cookie!",
-          "Amazing! I'm growing so fast! 🌱 More cookies will help me become the ultimate monkey!",
-          "Callee, I feel so energetic! ⚡ These cookies are making me bigger and more acrobatic!",
-          "Oook ook! I'm transforming! 🦋 Keep the cookies coming - I'm almost ready for the next stage!",
-          "Incredible! My monkey body is changing! 🐵 More cookies will help me reach my full potential!"
-        ];
-        return getRandomThought(growingThoughts);
-      } else {
-        const happyThoughts = [
-          "Oook ook! 🥳 I feel amazing, Callee! Now... could you get me some monkey friends to play with!",
-          "Oook ook! I'm so strong now! 💪 Maybe it's time to find some playmates to swing with?",
-          "I feel fantastic! 🌟 All those cookies worked! Now I'm ready for some monkey business with friends!",
-          "Amazing! I'm at my best! ✨ Callee, can you help me find some buddies to climb trees with?",
-          "Hooray! I'm fully grown! 🎉 Can you help me find some monkey friends to play with?",
-          "Perfect! I feel incredible! 🚀 Maybe it's time to find some playmates for jungle adventures?"
-        ];
-        return getRandomThought(happyThoughts);
-      }
-    }
 
-    // Feather-specific thoughts based on coins spent
-    if (currentPet === 'feather' && isPetOwned('feather')) {
-      const featherCoinsSpent = getPetCoinsSpent('feather');
-      
-      if (featherCoinsSpent === 0) {
-        const hungryThoughts = [
-          "Chirp chirp! 🦜 I'm Feather! My little bird belly is empty... can you feed me some seeds?",
-          "Tweet tweet! 🌟 Feather here! I'm fluttering from hunger... got any treats?",
-          "Chirp! It's me, your feathered friend Feather! 🦜 My tummy is chirping for some seeds!",
-          "Hi Callee! Feather needs some yummy seeds! 🌱 My bird appetite is huge!",
-          "Tweet tweet! 🦜 Feather is starving! Can you help your bird friend with some treats?",
-          "Callee! 🌟 Your bird Feather is so hungry... seeds would make me sing beautiful songs!"
-        ];
-        return getRandomThought(hungryThoughts);
-      } else if (featherCoinsSpent < 30) {
-        const satisfiedThoughts = [
-          "Tweet tweet! 🌱 More seeds will make this bird sing with joy!",
-          "Chirp chirp! Those seeds were amazing! 🦜 But Feather could eat more!",
-          "Yum yum! 🌾 These treats are perfect for a growing bird like me!",
-          "Tweet! Those seeds hit the spot! 🦜 But my bird appetite is still growing!",
-          "Thank you, Callee! 🥰 Those seeds were perfect, but Feather is still a little peckish!",
-          "Delicious! 🌱 My wings are flapping so fast! More seeds would make me soar with happiness!"
-        ];
-        return getRandomThought(satisfiedThoughts);
-      } else if (featherCoinsSpent < 50) {
-        const growingThoughts = [
-          "Tweet tweet! I'm growing stronger! 🦜 Keep feeding me - I'm getting bigger and more colorful!",
-          "Look at me fly! 💪 I can feel myself getting stronger with each seed!",
-          "Amazing! I'm growing so fast! 🌱 More seeds will help me become the ultimate bird!",
-          "Callee, I feel so energetic! ⚡ These seeds are making me bigger and more graceful!",
-          "Tweet tweet! I'm transforming! 🦋 Keep the seeds coming - I'm almost ready for the next stage!",
-          "Incredible! My feathers are changing! 🦜 More seeds will help me reach my full potential!"
-        ];
-        return getRandomThought(growingThoughts);
-      } else {
-        const happyThoughts = [
-          "Tweet tweet! 🥳 I feel amazing, Callee! Now... could you get me some bird friends to fly with!",
-          "Tweet tweet! I'm so strong now! 💪 Maybe it's time to find some playmates to soar with?",
-          "I feel fantastic! 🌟 All those seeds worked! Now I'm ready for some aerial adventures with friends!",
-          "Amazing! I'm at my best! ✨ Callee, can you help me find some buddies to fly through clouds with?",
-          "Hooray! I'm fully grown! 🎉 Can you help me find some bird friends to play with?",
-          "Perfect! I feel incredible! 🚀 Maybe it's time to find some playmates for sky adventures?"
-        ];
-        return getRandomThought(happyThoughts);
-      }
-    }
-    
-    // Default dog thoughts
-    const coinsSpentOnFeeding = getCoinsSpentForCurrentStage(currentStreak);
-    
-    // Pet thoughts based on coins spent on feeding
-    if (coinsSpentOnFeeding === 0) {
-      // No coins spent on feeding yet
-      const hungryThoughts = [
-        "Hi Callee... I'm April 🐶 and my tummy's rumbling sadly. Could you please feed me some cookies?",
-        "Woof... It's me, April! 🐕 I'm so hungry and feeling down... could you spare some cookies for me?",
-        "Hey there, Callee... April here 🐶 My belly is making sad noises... feed me, please?",
-        "Hi friend... I'm April and I'm starving... 🍪 Do you have any cookies to cheer me up?",
-        "Callee... It's your puppy April! 🐶 I haven't eaten yet and I'm feeling so low... can you help me out?",
-        "Callee... 🐕 My tummy feels so empty and sad... cookies would really lift my spirits!"
-      ];
-      return getRandomThought(hungryThoughts);
-    } else if (coinsSpentOnFeeding < 30) {
-      // 10-20 coins spent on feeding (1-2 feedings)
-      const satisfiedThoughts = [
-        "Mmm… yummy! 🍪 More cookies will make me wag my tail even faster!",
-        "That was delicious! 😋 But I could definitely eat more cookies, Callee!",
-        "Nom nom nom! 🍪 These cookies are amazing! Can I have another one?",
-        "Woof! Those cookies hit the spot! 🐶 But my appetite is still growing!",
-        "Thank you, Callee! 🥰 Those cookies were perfect, but I'm still a little peckish!",
-        "Yum yum! 🍪 My tail is wagging so fast! More cookies would make me even happier!"
-      ];
-      return getRandomThought(satisfiedThoughts);
-    } else if (coinsSpentOnFeeding < 50) {
-      // 30-40 coins spent on feeding (3-4 feedings)
-      const growingThoughts = [
-        "Woof woof! I'm growing stronger! 🐶 Keep feeding me - I'm getting bigger!",
-        "Look at me go! 💪 I can feel myself getting stronger with each cookie!",
-        "Amazing! I'm growing so fast! 🌱 More cookies will help me grow even more!",
-        "Callee, I feel so energetic! ⚡ These cookies are making me bigger and stronger!",
-        "Wag wag! I'm transforming! 🦋 Keep the cookies coming - I'm almost ready for the next stage!",
-        "Incredible! My body is changing! 🐕 More cookies will help me reach my full potential!"
-      ];
-      return getRandomThought(growingThoughts);
-    } else {
-      // 50+ coins spent on feeding (5+ feedings)
-      const happyThoughts = [
-        "Yippee! 🥳 I feel amazing, Callee! Now… could you get me some friends to play with!",
-        "Woof woof! I'm so strong now! 💪 Maybe it's time to find some playmates?",
-        "I feel fantastic! 🌟 All those cookies worked! Now I'm ready for some friends!",
-        "Amazing! I'm at my best! ✨ Callee, can you help me find some buddies to play with?",
-        "Hooray! I'm fully grown! 🎉 Can you help me find some buddies to play with?",
-        "Perfect! I feel incredible! 🚀 Maybe it's time to find some playmates?"
-      ];
-      return getRandomThought(happyThoughts);
-    }
+    // Return initial greeting if no conversation has started
+    return getInitialGreeting();
   };
 
   // Get coins spent for current pet
@@ -740,8 +633,16 @@ export function PetPage({}: Props): JSX.Element {
 
   // Stop voice interaction when switching pets or opening pet shop
   useEffect(() => {
-    stopAll();
-  }, [currentPet, showPetShop, stopAll]);
+    if (isListening && recognition) {
+      recognition.stop();
+    }
+    if (isProcessing) {
+      setIsProcessing(false);
+    }
+    setTranscribedMessage('');
+    setTranscribedText('');
+    ttsService.stop();
+  }, [currentPet, showPetShop, recognition]);
 
   // Update action states when voice state changes
   useEffect(() => {
@@ -756,6 +657,22 @@ export function PetPage({}: Props): JSX.Element {
         : action
     ));
   }, [isListening]);
+
+  // Add this effect to reset the guess when the pet thought changes
+  useEffect(() => {
+    setUserGuess([]);
+    setIsGuessCorrect(false);
+    setActiveBoxIndex(-1);
+  }, [currentPetThought]);
+
+  // Add this after other useEffect declarations
+  useEffect(() => {
+    // Focus the next input box when activeBoxIndex changes
+    if (activeBoxIndex >= 0) {
+      const inputs = document.querySelectorAll<HTMLInputElement>('.character-input');
+      inputs[activeBoxIndex]?.focus();
+    }
+  }, [activeBoxIndex]);
 
 
   return (
@@ -832,7 +749,7 @@ export function PetPage({}: Props): JSX.Element {
       </div>
 
       {/* Top UI - Heart only */}
-      <div className="absolute top-5 right-10 z-20">
+      <div className="absolute top-4 right-10 z-20">
         {/* Heart that fills with blood */}
         <div className="w-20 h-20 rounded-full flex items-center justify-center relative bg-white/20 backdrop-blur-sm border-2 border-white/30 shadow-lg">
           <div style={{
@@ -847,7 +764,7 @@ export function PetPage({}: Props): JSX.Element {
             <div style={{
               position: 'absolute',
               fontSize: 84,
-              color: '#E5E7EB'
+              color: '#E5E7EB',
             }}>
               🤍
             </div>
@@ -915,11 +832,17 @@ export function PetPage({}: Props): JSX.Element {
           {/* Pet Container - Left Side */}
           <div className="relative w-72">
             {/* Pet Image with bouncing animation */}
-            <div className="relative drop-shadow-2xl animate-gentle-bounce">
+            <div className={cn(
+              "relative drop-shadow-2xl",
+              isEating ? "animate-happy-bounce" : "animate-gentle-bounce"
+            )}>
               <img 
                 src={getPetImage()}
                 alt="Pet"
-                className="w-72 h-72 object-contain rounded-2xl transition-all duration-700 ease-out hover:scale-105"
+                className={cn(
+                  "w-72 h-72 object-contain rounded-2xl transition-all duration-700 ease-out hover:scale-105",
+                  isEating && "animate-nom-nom"
+                )}
                 style={{
                   animation: careLevel * 10 >= 30 && careLevel * 10 < 50 ? 'petGrow 800ms ease-out' : 
                             careLevel * 10 >= 50 ? 'petEvolve 800ms ease-out' : 'none'
@@ -927,18 +850,34 @@ export function PetPage({}: Props): JSX.Element {
               />
             </div>
             
-            {/* Food bowl moved under pet with sparkle effect */}
-            {/* <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-5xl drop-shadow-lg animate-sparkle">
-              🥣
-              <div className="absolute -top-2 -right-2 text-2xl animate-spin-slow">✨</div>
-            </div> */}
+            {/* Cookie particles */}
+            {showCookieParticles && (
+              <div className="cookie-particles absolute inset-0">
+                {[...Array(6)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="cookie-particle absolute"
+                    style={{
+                      '--delay': `${i * 0.1}s`,
+                      '--angle': `${(i * 60) + Math.random() * 30}deg`,
+                      '--distance': `${Math.random() * 20 + 40}px`
+                    } as React.CSSProperties}
+                  >
+                    🍪
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Chat Area - Right Side */}
           <div className="flex-1 max-w-2xl">
             {/* Pet's Chat Bubble */}
             {!showPetShop && (
-              <div className="relative bg-gradient-to-br from-blue-50 to-cyan-50 rounded-3xl p-6 mb-8 border-3 border-blue-400 shadow-xl w-full backdrop-blur-sm bg-white/90 hover:scale-102 transition-transform">
+              <div className={cn(
+                "relative bg-gradient-to-br from-blue-50 to-cyan-50 rounded-3xl p-6 mb-8 border-3 border-blue-400 shadow-xl w-full backdrop-blur-sm bg-white/90 hover:scale-102 transition-all duration-500",
+                isProcessing && "scale-[0.85] opacity-90"
+              )}>
                 {/* Speech bubble tail pointing to pet */}
                 <div className="absolute top-1/2 -left-3 transform -translate-y-1/2 w-0 h-0 border-t-[12px] border-b-[12px] border-r-[12px] border-t-transparent border-b-transparent border-r-blue-400"></div>
                 
@@ -947,15 +886,113 @@ export function PetPage({}: Props): JSX.Element {
                   {currentPet === 'dog' ? 'April 🐶' : currentPet === 'bobo' ? 'Bobo 🐵' : 'Feather 🦜'}
                 </div>
 
-                <div className="text-lg text-slate-800 font-medium leading-relaxed mt-2">
-                  {currentPetThought}
-                </div>
-
-                {/* Animated dots under chat */}
-                <div className="absolute -bottom-6 left-4 flex gap-1">
-                  <div className="w-2 h-2 rounded-full bg-blue-400 animate-bounce" style={{animationDelay: '0s'}}></div>
-                  <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{animationDelay: '0.3s'}}></div>
-                  <div className="w-1 h-1 rounded-full bg-blue-400 animate-bounce" style={{animationDelay: '0.6s'}}></div>
+                <div className={cn(
+                  "text-lg text-slate-800 font-medium leading-relaxed mt-2",
+                  "transition-all duration-500",
+                  isProcessing && "scale-95"
+                )}>
+                  {isProcessing ? (
+                    <div className="flex items-center gap-2">
+                      <span>Thinking</span>
+                      <div className="flex gap-1">
+                        <span className="w-2 h-2 bg-slate-400 rounded-full animate-thinking-dot" style={{ animationDelay: '0s' }}></span>
+                        <span className="w-2 h-2 bg-slate-400 rounded-full animate-thinking-dot" style={{ animationDelay: '0.2s' }}></span>
+                        <span className="w-2 h-2 bg-slate-400 rounded-full animate-thinking-dot" style={{ animationDelay: '0.4s' }}></span>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* First word as interactive boxes */}
+                      <div className="flex flex-col gap-2">
+                        <div className="flex gap-1">
+                          {currentPetThought.split(' ')[0].split('').map((char, index) => {
+                            const isCorrect = userGuess[index]?.toLowerCase() === char.toLowerCase();
+                            const hasGuess = userGuess[index] !== undefined;
+                            const isActive = activeBoxIndex === index;
+                            
+                            return (
+                              <input 
+                                key={index}
+                                type="text"
+                                maxLength={1}
+                                value={userGuess[index] || ''}
+                                className={cn(
+                                  "w-8 h-8 border-2 rounded-md text-center font-bold text-lg transition-all duration-200",
+                                  "focus:outline-none focus:ring-2 focus:ring-offset-2",
+                                  "character-input", // Add this class for querySelector
+                                  hasGuess ? (
+                                    isCorrect 
+                                      ? "border-green-500 bg-green-100 text-green-700 focus:ring-green-500"
+                                      : "border-red-500 bg-red-100 text-red-700 focus:ring-red-500"
+                                  ) : "border-slate-400 focus:border-blue-500 focus:ring-blue-500",
+                                  isActive && "scale-110"
+                                )}
+                                onClick={() => setActiveBoxIndex(index)}
+                                onChange={(e) => {
+                                  const newGuess = [...userGuess];
+                                  const input = e.target.value;
+                                  
+                                  if (input) {
+                                    newGuess[index] = input;
+                                    setUserGuess(newGuess);
+                                    
+                                    // Move to next box if available
+                                    if (index < currentPetThought.split(' ')[0].length - 1) {
+                                      setActiveBoxIndex(index + 1);
+                                    }
+                                    
+                                    // Check if word is complete and correct
+                                    const word = newGuess.join('');
+                                    if (word.toLowerCase() === currentPetThought.split(' ')[0].toLowerCase()) {
+                                      setIsGuessCorrect(true);
+                                    } else {
+                                      setIsGuessCorrect(false);
+                                    }
+                                  }
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Backspace') {
+                                    e.preventDefault(); // Prevent default backspace behavior
+                                    const newGuess = [...userGuess];
+                                    
+                                    if (userGuess[index]) {
+                                      // If current box has a character, clear it
+                                      newGuess[index] = '';
+                                      setUserGuess(newGuess);
+                                      setIsGuessCorrect(false);
+                                    } else if (index > 0) {
+                                      // If current box is empty and we're not at first box,
+                                      // move to previous box and clear it
+                                      setActiveBoxIndex(index - 1);
+                                      newGuess[index - 1] = '';
+                                      setUserGuess(newGuess);
+                                      setIsGuessCorrect(false);
+                                    }
+                                  } else if (e.key === 'ArrowLeft' && index > 0) {
+                                    setActiveBoxIndex(index - 1);
+                                  } else if (e.key === 'ArrowRight' && index < currentPetThought.split(' ')[0].length - 1) {
+                                    setActiveBoxIndex(index + 1);
+                                  }
+                                }}
+                              />
+                            );
+                          })}
+                        </div>
+                        
+                        {/* Success message */}
+                        {isGuessCorrect && (
+                          <div className="text-green-600 font-medium animate-fade-in mt-2">
+                            ✨ Correct! Well done!
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Rest of the message */}
+                      <div className="mt-4">
+                        {currentPetThought.split(' ').slice(1).join(' ')}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -963,9 +1000,29 @@ export function PetPage({}: Props): JSX.Element {
         </div>
 
         {/* User Chat Area - Bottom Right */}
-        <div className="fixed bottom-24 right-8 flex flex-row-reverse items-end gap-4 z-30">
-          {/* User Avatar */}
-          <div className="relative">
+        <div className="fixed bottom-56 right-8 z-30">
+          <div className="relative flex items-start gap-4">
+            {/* User's transcribed message */}
+            {(transcribedMessage || isListening) && (
+              <div className="max-w-md animate-fade-in mt-12">
+                <div className="relative bg-gradient-to-br from-purple-500/90 to-indigo-600/90 backdrop-blur-sm rounded-2xl p-4 shadow-xl border border-white/20">
+                  {/* Speech bubble tail pointing to kid */}
+                  <div className="absolute top-1/2 -right-3 transform -translate-y-1/2 w-0 h-0 border-t-[12px] border-b-[12px] border-l-[12px] border-t-transparent border-b-transparent border-l-purple-500/90"></div>
+                  <div className="text-md text-white font-medium leading-relaxed">
+                    {isListening ? (
+                      <div className="flex items-center gap-2">
+                        <span>Listening</span>
+                        <span className="animate-bounce">.</span>
+                        <span className="animate-bounce" style={{ animationDelay: '0.2s' }}>.</span>
+                        <span className="animate-bounce" style={{ animationDelay: '0.4s' }}>.</span>
+                      </div>
+                    ) : transcribedMessage}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* User Avatar */}
             <div className="relative w-72">
               {/* Kid Image with bouncing animation */}
               <div className="relative drop-shadow-2xl animate-gentle-bounce">
@@ -977,24 +1034,6 @@ export function PetPage({}: Props): JSX.Element {
               </div>
             </div>
           </div>
-
-          {/* User's transcribed message */}
-          {transcribedMessage && (
-            <div className="max-w-md animate-fade-in">
-              <div className="relative bg-gradient-to-br from-purple-500/90 to-indigo-600/90 backdrop-blur-sm rounded-2xl p-4 shadow-xl border border-white/20">
-                {/* Speech bubble tail pointing to kid */}
-                <div className="absolute top-1/2 -right-3 transform -translate-y-1/2 w-0 h-0 border-t-[12px] border-b-[12px] border-l-[12px] border-t-transparent border-b-transparent border-l-purple-500/90"></div>
-                <div className="text-sm text-white font-medium leading-relaxed">
-                  {transcribedMessage}
-                </div>
-                {messageTimestamp && (
-                  <div className="text-xs text-white/50 mt-1">
-                    {new Date(messageTimestamp).toLocaleTimeString()}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -1463,6 +1502,84 @@ export function PetPage({}: Props): JSX.Element {
           .min-h-screen {
             animation: shimmer 15s ease infinite;
             background-size: 200% 200%;
+          }
+
+          @keyframes happy-bounce {
+            0%, 100% {
+              transform: translateY(0) rotate(0deg);
+            }
+            25% {
+              transform: translateY(-15px) rotate(-5deg);
+            }
+            50% {
+              transform: translateY(-5px) rotate(5deg);
+            }
+            75% {
+              transform: translateY(-10px) rotate(-3deg);
+            }
+          }
+
+          @keyframes nom-nom {
+            0%, 100% {
+              transform: scale(1);
+            }
+            50% {
+              transform: scale(1.05);
+            }
+          }
+
+          .animate-happy-bounce {
+            animation: happy-bounce 1s ease-in-out;
+          }
+
+          .animate-nom-nom {
+            animation: nom-nom 0.3s ease-in-out 3;
+          }
+
+          .cookie-particle {
+            font-size: 1.5rem;
+            opacity: 0;
+            animation: cookie-particle 0.6s ease-out forwards;
+            transform-origin: center;
+          }
+
+          @keyframes cookie-particle {
+            0% {
+              opacity: 1;
+              transform: translate(0, 0) scale(0.5);
+            }
+            50% {
+              opacity: 1;
+            }
+            100% {
+              opacity: 0;
+              transform: 
+                translate(
+                  calc(cos(var(--angle)) * var(--distance)),
+                  calc(sin(var(--angle)) * var(--distance))
+                )
+                scale(0.2);
+            }
+          }
+
+          .cookie-particles {
+            pointer-events: none;
+            z-index: 30;
+          }
+
+          @keyframes thinking-dot {
+            0%, 100% {
+              transform: translateY(0) scale(1);
+              opacity: 0.5;
+            }
+            50% {
+              transform: translateY(-4px) scale(1.2);
+              opacity: 1;
+            }
+          }
+
+          .animate-thinking-dot {
+            animation: thinking-dot 1s ease-in-out infinite;
           }
         `}
       </style>
