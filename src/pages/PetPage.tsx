@@ -875,7 +875,9 @@ export function PetPage({}: Props): JSX.Element {
             {/* Pet's Chat Bubble */}
             {!showPetShop && (
               <div className={cn(
-                "relative bg-gradient-to-br from-blue-50 to-cyan-50 rounded-3xl p-6 mb-8 border-3 border-blue-400 shadow-xl w-full backdrop-blur-sm bg-white/90 hover:scale-102 transition-all duration-500",
+                "relative bg-gradient-to-br from-blue-50 to-cyan-50 rounded-3xl p-6 mb-8 border-[6px] border-dashed border-blue-400/50 shadow-xl w-full backdrop-blur-sm bg-white/90 hover:scale-102 transition-all duration-500",
+                "before:content-[''] before:absolute before:-inset-2 before:border-[4px] before:border-pink-400/30 before:rounded-[2rem] before:z-[-1]",
+                "after:content-[''] after:absolute after:-inset-4 after:border-[4px] after:border-purple-400/20 after:rounded-[2.5rem] after:z-[-2]",
                 isProcessing && "scale-[0.85] opacity-90"
               )}>
                 {/* Speech bubble tail pointing to pet */}
@@ -1054,7 +1056,9 @@ export function PetPage({}: Props): JSX.Element {
 
       {/* Bottom Action Buttons - Centered with playful style */}
       <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-30">
-        <div className="flex gap-6 px-8 py-6 bg-white/10 backdrop-blur-md rounded-full border-2 border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.2)] hover:shadow-[0_16px_48px_rgba(0,0,0,0.3)] transition-all duration-300">
+        <div className="flex gap-6 px-8 py-6 bg-white/10 backdrop-blur-md rounded-full border-[6px] border-dashed border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.2)] hover:shadow-[0_16px_48px_rgba(0,0,0,0.3)] transition-all duration-300 relative
+          before:content-[''] before:absolute before:-inset-2 before:border-[4px] before:border-pink-400/30 before:rounded-full before:z-[-1]
+          after:content-[''] after:absolute after:-inset-4 after:border-[4px] after:border-purple-400/20 after:rounded-full after:z-[-2]">
         {actionStates.map((action) => (
           <button
             key={action.id}
@@ -1283,6 +1287,20 @@ export function PetPage({}: Props): JSX.Element {
           </div>
         </div>
       )}
+
+      {/* Add floating stars animation */}
+      <div className="stars-container absolute inset-0 pointer-events-none z-0">
+        {[...Array(15)].map((_, i) => (
+          <div
+            key={`star-${i}`}
+            className="star"
+            style={{
+              '--delay': `${Math.random() * 5}s`,
+              '--position': `${Math.random() * 100}%`,
+            } as React.CSSProperties}
+          />
+        ))}
+      </div>
 
       <style>
         {`
@@ -1580,6 +1598,85 @@ export function PetPage({}: Props): JSX.Element {
 
           .animate-thinking-dot {
             animation: thinking-dot 1s ease-in-out infinite;
+          }
+
+          /* Add twinkling stars animation */
+          .stars-container {
+            overflow: hidden;
+          }
+
+          .star {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            left: var(--position);
+            top: -20px;
+            background: radial-gradient(circle at center, #fff 0%, rgba(255,255,255,0) 70%);
+            animation: twinkle 3s linear infinite;
+            animation-delay: var(--delay);
+          }
+
+          @keyframes twinkle {
+            0% {
+              transform: translateY(0) rotate(0deg) scale(0);
+              opacity: 0;
+            }
+            50% {
+              transform: translateY(40vh) rotate(180deg) scale(1);
+              opacity: 0.8;
+            }
+            100% {
+              transform: translateY(80vh) rotate(360deg) scale(0);
+              opacity: 0;
+            }
+          }
+
+          /* Rainbow gradient animation for borders */
+          @keyframes rainbow-border {
+            0% { border-color: rgba(255, 0, 0, 0.3); }
+            20% { border-color: rgba(255, 165, 0, 0.3); }
+            40% { border-color: rgba(255, 255, 0, 0.3); }
+            60% { border-color: rgba(0, 255, 0, 0.3); }
+            80% { border-color: rgba(0, 0, 255, 0.3); }
+            100% { border-color: rgba(255, 0, 0, 0.3); }
+          }
+
+          /* Add rainbow animation to dashed borders */
+          .border-dashed {
+            animation: rainbow-border 10s linear infinite;
+          }
+
+          /* Enhance particle effects */
+          .particle {
+            box-shadow: 0 0 10px rgba(255,255,255,0.8);
+            background: radial-gradient(circle at center, 
+              rgba(255,255,255,0.9) 0%, 
+              rgba(255,182,193,0.6) 50%, 
+              rgba(255,255,255,0) 70%
+            );
+          }
+
+          /* Add a subtle pulse effect to buttons */
+          button {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          }
+
+          button:hover {
+            transform: translateY(-2px) scale(1.05);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+          }
+
+          button:active {
+            transform: translateY(1px) scale(0.98);
+          }
+
+          /* Enhance magical particles */
+          .magical-particles {
+            mix-blend-mode: screen;
+          }
+
+          .magical-particles .particle {
+            filter: blur(1px);
           }
         `}
       </style>
