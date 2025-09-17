@@ -6,10 +6,11 @@ import { usePetData } from '@/lib/pet-data-service';
 import { useAuth } from '@/hooks/use-auth';
 import { Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import pupOpen from '@/assets/faceSwap (1).gif';
+import pupOpen from '@/assets/cute-pup.gif';
 import littleKid from '@/assets/little-kid.png';
 import { EvolutionMenu } from '@/components/ui/evolution-menu';
 import { petAIService } from '@/lib/pet-ai-service';
+import { SpellingQuestion } from '@/lib/questionBankUtils';
 
 type Props = {};
 
@@ -41,6 +42,7 @@ export function PetPage({}: Props): JSX.Element {
   const [lastSpokenMessage, setLastSpokenMessage] = useState('');
   const [transcribedMessage, setTranscribedMessage] = useState('');
   const [aiResponse, setAiResponse] = useState(''); // Add this line
+  const [currentSpellingQuestion, setCurrentSpellingQuestion] = useState<SpellingQuestion | null>(null);
 
   // Streak system for dog evolution unlocks - based on consecutive calendar days (US timezone)
   const [currentStreak, setCurrentStreak] = useState(() => {
@@ -119,19 +121,28 @@ export function PetPage({}: Props): JSX.Element {
       // Get the response from our pet AI service
       const response = await petAIService.generateResponse(currentPet, transcript);
       
-      // Update the AI response first
-      setAiResponse(response);
+      // Update the AI response and spelling question
+      setAiResponse(response.message);
+      if (response.spellingQuestion && response.message.includes(response.spellingQuestion.audio)) {
+        setCurrentSpellingQuestion(response.spellingQuestion);
+      }
+      
+      // Reset user input state when getting new response
+      setUserGuess([]);
+      setIsGuessCorrect(false);
+      setActiveBoxIndex(-1);
       
       // Add a small delay before speaking to ensure the UI has updated
       if (audioEnabled) {
         setTimeout(async () => {
           console.log('Speaking response:', response);
-          await speakText(response);
+          await speakText(response.message);
         }, 500); // 500ms delay to ensure smooth transition
       }
     } catch (error) {
       console.error('Failed to get AI response:', error);
       setAiResponse("I'm having trouble understanding right now. Could you try again?");
+      setCurrentSpellingQuestion(null);
     } finally {
       setIsProcessing(false);
     }
@@ -840,7 +851,7 @@ export function PetPage({}: Props): JSX.Element {
                 src={getPetImage()}
                 alt="Pet"
                 className={cn(
-                  "w-72 h-72 object-contain rounded-2xl transition-all duration-700 ease-out hover:scale-105",
+                  "w-80 h-80 object-contain rounded-2xl transition-all duration-700 ease-out hover:scale-105",
                   isEating && "animate-nom-nom"
                 )}
                 style={{
@@ -904,94 +915,186 @@ export function PetPage({}: Props): JSX.Element {
                     </div>
                   ) : (
                     <>
-                      {/* First word as interactive boxes */}
-                      <div className="flex flex-col gap-2">
-                        <div className="flex gap-1">
-                          {currentPetThought.split(' ')[0].split('').map((char, index) => {
-                            const isCorrect = userGuess[index]?.toLowerCase() === char.toLowerCase();
-                            const hasGuess = userGuess[index] !== undefined;
-                            const isActive = activeBoxIndex === index;
-                            
-                            return (
-                              <input 
-                                key={index}
-                                type="text"
-                                maxLength={1}
-                                value={userGuess[index] || ''}
-                                className={cn(
-                                  "w-8 h-8 border-2 rounded-md text-center font-bold text-lg transition-all duration-200",
-                                  "focus:outline-none focus:ring-2 focus:ring-offset-2",
-                                  "character-input", // Add this class for querySelector
-                                  hasGuess ? (
-                                    isCorrect 
-                                      ? "border-green-500 bg-green-100 text-green-700 focus:ring-green-500"
-                                      : "border-red-500 bg-red-100 text-red-700 focus:ring-red-500"
-                                  ) : "border-slate-400 focus:border-blue-500 focus:ring-blue-500",
-                                  isActive && "scale-110"
-                                )}
-                                onClick={() => setActiveBoxIndex(index)}
-                                onChange={(e) => {
-                                  const newGuess = [...userGuess];
-                                  const input = e.target.value;
-                                  
-                                  if (input) {
-                                    newGuess[index] = input;
-                                    setUserGuess(newGuess);
+                      {/* Spelling question input boxes */}
+                      {currentSpellingQuestion && currentPetThought.includes(currentSpellingQuestion.audio) && (
+                        <div className="flex flex-col gap-2">
+                          <div className="flex gap-1">
+                            {currentSpellingQuestion.audio.split('').map((char, index) => {
+                              const isCorrect = userGuess[index]?.toLowerCase() === char.toLowerCase();
+                              const hasGuess = userGuess[index] !== undefined;
+                              const isActive = activeBoxIndex === index;
+                              
+                              return (
+                                <input 
+                                  key={index}
+                                  type="text"
+                                  maxLength={1}
+                                  value={userGuess[index] || ''}
+                                  className={cn(
+                                    "w-8 h-8 border-2 rounded-md text-center font-bold text-lg transition-all duration-200",
+                                    "focus:outline-none focus:ring-2 focus:ring-offset-2",
+                                    "character-input", // Add this class for querySelector
+                                    hasGuess ? (
+                                      isCorrect 
+                                        ? "border-green-500 bg-green-100 text-green-700 focus:ring-green-500"
+                                        : "border-red-500 bg-red-100 text-red-700 focus:ring-red-500"
+                                    ) : "border-slate-400 focus:border-blue-500 focus:ring-blue-500",
+                                    isActive && "scale-110"
+                                  )}
+                                  onClick={() => setActiveBoxIndex(index)}
+                                  onChange={(e) => {
+                                    const newGuess = [...userGuess];
+                                    const input = e.target.value;
                                     
-                                    // Move to next box if available
-                                    if (index < currentPetThought.split(' ')[0].length - 1) {
+                                    if (input) {
+                                      newGuess[index] = input;
+                                      setUserGuess(newGuess);
+                                      
+                                      // Move to next box if available
+                                      if (index < currentSpellingQuestion.audio.length - 1) {
+                                        setActiveBoxIndex(index + 1);
+                                      }
+                                      
+                                      // Check if word is complete and correct
+                                      const word = newGuess.join('');
+                                      if (word.toLowerCase() === currentSpellingQuestion.audio.toLowerCase()) {
+                                        setIsGuessCorrect(true);
+                                      } else {
+                                        setIsGuessCorrect(false);
+                                      }
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Backspace') {
+                                      e.preventDefault(); // Prevent default backspace behavior
+                                      const newGuess = [...userGuess];
+                                      
+                                      if (userGuess[index]) {
+                                        // If current box has a character, clear it
+                                        newGuess[index] = '';
+                                        setUserGuess(newGuess);
+                                        setIsGuessCorrect(false);
+                                      } else if (index > 0) {
+                                        // If current box is empty and we're not at first box,
+                                        // move to previous box and clear it
+                                        setActiveBoxIndex(index - 1);
+                                        newGuess[index - 1] = '';
+                                        setUserGuess(newGuess);
+                                        setIsGuessCorrect(false);
+                                      }
+                                    } else if (e.key === 'ArrowLeft' && index > 0) {
+                                      setActiveBoxIndex(index - 1);
+                                    } else if (e.key === 'ArrowRight' && index < currentSpellingQuestion.audio.length - 1) {
                                       setActiveBoxIndex(index + 1);
                                     }
-                                    
-                                    // Check if word is complete and correct
-                                    const word = newGuess.join('');
-                                    if (word.toLowerCase() === currentPetThought.split(' ')[0].toLowerCase()) {
-                                      setIsGuessCorrect(true);
-                                    } else {
-                                      setIsGuessCorrect(false);
-                                    }
-                                  }
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Backspace') {
-                                    e.preventDefault(); // Prevent default backspace behavior
-                                    const newGuess = [...userGuess];
-                                    
-                                    if (userGuess[index]) {
-                                      // If current box has a character, clear it
-                                      newGuess[index] = '';
-                                      setUserGuess(newGuess);
-                                      setIsGuessCorrect(false);
-                                    } else if (index > 0) {
-                                      // If current box is empty and we're not at first box,
-                                      // move to previous box and clear it
-                                      setActiveBoxIndex(index - 1);
-                                      newGuess[index - 1] = '';
-                                      setUserGuess(newGuess);
-                                      setIsGuessCorrect(false);
-                                    }
-                                  } else if (e.key === 'ArrowLeft' && index > 0) {
-                                    setActiveBoxIndex(index - 1);
-                                  } else if (e.key === 'ArrowRight' && index < currentPetThought.split(' ')[0].length - 1) {
-                                    setActiveBoxIndex(index + 1);
-                                  }
-                                }}
-                              />
-                            );
-                          })}
-                        </div>
-                        
-                        {/* Success message */}
-                        {isGuessCorrect && (
-                          <div className="text-green-600 font-medium animate-fade-in mt-2">
-                            ✨ Correct! Well done!
+                                  }}
+                                />
+                              );
+                            })}
                           </div>
-                        )}
-                      </div>
+                          
+                          {/* Success message */}
+                          {isGuessCorrect && (
+                            <div className="text-green-600 font-medium animate-fade-in mt-2">
+                              ✨ Correct! Well done!
+                            </div>
+                          )}
+                        </div>
+                      )}
                       
-                      {/* Rest of the message */}
-                      <div className="mt-4">
-                        {currentPetThought.split(' ').slice(1).join(' ')}
+                      {/* Pet's message with inline spelling boxes */}
+                      <div className="mt-0 text-base leading-relaxed">
+                        {currentSpellingQuestion && currentPetThought.includes(currentSpellingQuestion.audio) ? (
+                          <>
+                            {currentPetThought.split(currentSpellingQuestion.audio).map((textPart, partIndex, parts) => (
+                              <React.Fragment key={partIndex}>
+                                {textPart}
+                                {partIndex < parts.length - 1 && (
+                                  <span className="inline-flex gap-[2px] mx-[2px] items-baseline">
+                                    {currentSpellingQuestion.audio.split('').map((char, index) => {
+                                      const isCorrect = userGuess[index]?.toLowerCase() === char.toLowerCase();
+                                      const hasGuess = userGuess[index] !== undefined;
+                                      const isActive = activeBoxIndex === index;
+                                      
+                                      return (
+                                        <input 
+                                          key={index}
+                                          type="text"
+                                          maxLength={1}
+                                          value={userGuess[index] || ''}
+                                          className={cn(
+                                            "w-5 h-5 border border-slate-400 rounded text-center font-medium text-sm transition-all duration-200",
+                                            "focus:outline-none focus:ring-1 focus:ring-offset-1",
+                                            "character-input", // Add this class for querySelector
+                                            hasGuess ? (
+                                              isCorrect 
+                                                ? "border-green-500 bg-green-50 text-green-700 focus:ring-green-500"
+                                                : "border-red-500 bg-red-50 text-red-700 focus:ring-red-500"
+                                            ) : "border-slate-300 focus:border-blue-500 focus:ring-blue-500",
+                                            isActive && "scale-105 border-blue-500"
+                                          )}
+                                          style={{
+                                            transform: `translateY(${isActive ? '-1px' : '0'})`,
+                                          }}
+                                          onClick={() => setActiveBoxIndex(index)}
+                                          onChange={(e) => {
+                                            const newGuess = [...userGuess];
+                                            const input = e.target.value;
+                                            
+                                            if (input) {
+                                              newGuess[index] = input;
+                                              setUserGuess(newGuess);
+                                              
+                                              // Move to next box if available
+                                              if (index < currentSpellingQuestion.audio.length - 1) {
+                                                setActiveBoxIndex(index + 1);
+                                              }
+                                              
+                                              // Check if word is complete and correct
+                                              const word = newGuess.join('');
+                                              if (word.toLowerCase() === currentSpellingQuestion.audio.toLowerCase()) {
+                                                setIsGuessCorrect(true);
+                                              } else {
+                                                setIsGuessCorrect(false);
+                                              }
+                                            }
+                                          }}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Backspace') {
+                                              e.preventDefault(); // Prevent default backspace behavior
+                                              const newGuess = [...userGuess];
+                                              
+                                              if (userGuess[index]) {
+                                                // If current box has a character, clear it
+                                                newGuess[index] = '';
+                                                setUserGuess(newGuess);
+                                                setIsGuessCorrect(false);
+                                              } else if (index > 0) {
+                                                // If current box is empty and we're not at first box,
+                                                // move to previous box and clear it
+                                                setActiveBoxIndex(index - 1);
+                                                newGuess[index - 1] = '';
+                                                setUserGuess(newGuess);
+                                                setIsGuessCorrect(false);
+                                              }
+                                            } else if (e.key === 'ArrowLeft' && index > 0) {
+                                              setActiveBoxIndex(index - 1);
+                                            } else if (e.key === 'ArrowRight' && index < currentSpellingQuestion.audio.length - 1) {
+                                              setActiveBoxIndex(index + 1);
+                                            }
+                                          }}
+                                        />
+                                      );
+                                    })}
+                                  </span>
+                                )}
+                              </React.Fragment>
+                            ))}
+                          </>
+                        ) : (
+                          // If no spelling question or word not in response, show full message
+                          currentPetThought
+                        )}
                       </div>
                     </>
                   )}
